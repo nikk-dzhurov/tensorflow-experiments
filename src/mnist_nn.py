@@ -12,6 +12,7 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 # Our application logic will be added here
 
+# writer = tf.summary.FileWriter()
 
 def cnn_model_fn(features, labels, mode):
     """Model function for CNN."""
@@ -39,7 +40,8 @@ def cnn_model_fn(features, labels, mode):
         kernel_size=[5, 5],
         padding="same",
         activation=tf.nn.relu,
-        name="conv2")
+        name="conv2"
+    )
 
     pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[
                                     2, 2], strides=2, name="pool2")
@@ -70,12 +72,13 @@ def cnn_model_fn(features, labels, mode):
     with tf.name_scope("calc_loss"):
         loss = tf.losses.sparse_softmax_cross_entropy(
             labels=labels, logits=logits)
+        tf.summary.scalar("loss", loss)
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
         summary_saver = tf.train.SummarySaverHook(
-            save_steps=10, output_dir=MODEL_DIR + "/train", summary_op=tf.summary.merge_all())
-        with tf.name_scope("optimize_loss"):
+            save_steps=1, output_dir=MODEL_DIR + "/train", summary_op=tf.summary.merge_all())
+        with tf.name_scope("train"):
             optimizer = tf.train.GradientDescentOptimizer(
                 learning_rate=0.001, name="gradient_descent_optimizer")
             train_op = optimizer.minimize(
@@ -107,27 +110,27 @@ def main(unused_argv):
     mnist_classifier = tf.estimator.Estimator(
         model_fn=cnn_model_fn, model_dir=MODEL_DIR)
 
-    tensors_to_log = {"probabilities": "softmax_tensor"}
-    logging_hook = tf.train.LoggingTensorHook(
-        tensors=tensors_to_log, every_n_iter=10)
+    # # tensors_to_log = {"probabilities": "softmax_tensor"}
+    # logging_hook = tf.train.LoggingTensorHook(
+    #     tensors=tensors_to_log, every_n_iter=10)
     # Train the model
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data},
         y=train_labels,
-        batch_size=10,
+        batch_size=1,
         num_epochs=None,
         shuffle=True)
     mnist_classifier.train(
         input_fn=train_input_fn,
-        steps=1000,
-        hooks=[logging_hook])
+        steps=1000)
+
     # Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": eval_data},
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
+    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=100)
     print(eval_results)
 
 
