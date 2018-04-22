@@ -9,4 +9,5 @@ nvidia-docker run -d \
 	--name tf_gpu \
 	-v "$(pwd)/src":"/app" \
 	-v "$(pwd)/models":"/models" \
-	tensorflow/tensorflow:latest-gpu
+	-v "/usr/local/cuda/extras/CUPTI/lib64":"/usr/local/cuda/extras/CUPTI/lib64" \
+	tensorflow/tensorflow:1.7.0-gpu-py3

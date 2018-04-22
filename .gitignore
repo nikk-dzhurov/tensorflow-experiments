@@ -1,2 +1,4 @@
+.idea/
 models/
 src/MNIST-data/
+src/__pycache__/

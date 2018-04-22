@@ -2,17 +2,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# Imports
+from common import clean_dir
+from common import build_layer_summaries
+
 import numpy as np
 import tensorflow as tf
 
-MODEL_DIR = "../models/mnist_convnet_model"
+MODEL_DIR = "../models/mnist"
 
 tf.logging.set_verbosity(tf.logging.INFO)
-
-# Our application logic will be added here
-
-# writer = tf.summary.FileWriter()
 
 def cnn_model_fn(features, labels, mode):
     """Model function for CNN."""
@@ -27,11 +25,16 @@ def cnn_model_fn(features, labels, mode):
         kernel_size=[5, 5],
         padding="same",
         activation=tf.nn.relu,
-        name="conv1")
+        name="conv1"
+    )
 
     # Pooling Layer #1
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[
-                                    2, 2], strides=2, name="pool1")
+    pool1 = tf.layers.max_pooling2d(
+        inputs=conv1,
+        pool_size=[2, 2],
+        strides=2,
+        name="pool1"
+    )
 
     # Convolutional Layer #2 and Pooling Layer #2
     conv2 = tf.layers.conv2d(
@@ -43,8 +46,15 @@ def cnn_model_fn(features, labels, mode):
         name="conv2"
     )
 
-    pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[
-                                    2, 2], strides=2, name="pool2")
+    pool2 = tf.layers.max_pooling2d(
+        inputs=conv2,
+        pool_size=[2, 2],
+        strides=2,
+        name="pool2"
+    )
+
+    build_layer_summaries("conv1")
+    build_layer_summaries("conv2")
 
     # Dense Layer
     with tf.name_scope("dense"):
@@ -69,30 +79,28 @@ def cnn_model_fn(features, labels, mode):
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
     # Calculate Loss (for both TRAIN and EVAL modes)
-    with tf.name_scope("calc_loss"):
-        loss = tf.losses.sparse_softmax_cross_entropy(
-            labels=labels, logits=logits)
-        tf.summary.scalar("loss", loss)
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="calc_loss")
+    tf.summary.scalar("cross_entropy", loss)
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
         summary_saver = tf.train.SummarySaverHook(
             save_steps=1, output_dir=MODEL_DIR + "/train", summary_op=tf.summary.merge_all())
-        with tf.name_scope("train"):
-            optimizer = tf.train.GradientDescentOptimizer(
-                learning_rate=0.001, name="gradient_descent_optimizer")
-            train_op = optimizer.minimize(
-                loss=loss,
-                global_step=tf.train.get_global_step(),
-                name="minimize_loss")
+        optimizer = tf.train.GradientDescentOptimizer(
+            learning_rate=0.001, name="gradient_descent_optimizer")
+        train_op = optimizer.minimize(
+            loss=loss,
+            global_step=tf.train.get_global_step(),
+            name="minimize_loss")
         return tf.estimator.EstimatorSpec(mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_saver])
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(
-            labels=labels, predictions=predictions["classes"])}
-    return tf.estimator.EstimatorSpec(
-        mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
+        "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
+    }
+    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
+
+
 
 
 def main(unused_argv):
@@ -103,26 +111,27 @@ def main(unused_argv):
     eval_data = mnist.test.images  # Returns np.array
     eval_labels = np.asarray(mnist.test.labels, dtype=np.int32)
 
-    if tf.gfile.Exists(MODEL_DIR):
-        tf.gfile.DeleteRecursively(MODEL_DIR)
-        tf.gfile.MakeDirs(MODEL_DIR)
+    clean_dir(MODEL_DIR)
 
-    mnist_classifier = tf.estimator.Estimator(
-        model_fn=cnn_model_fn, model_dir=MODEL_DIR)
+    mnist_classifier = tf.estimator.Estimator(model_fn=cnn_model_fn, model_dir=MODEL_DIR)
 
     # # tensors_to_log = {"probabilities": "softmax_tensor"}
     # logging_hook = tf.train.LoggingTensorHook(
     #     tensors=tensors_to_log, every_n_iter=10)
     # Train the model
+
+    # profiler_hook = tf.train.ProfilerHook(save_steps=50, output_dir=MODEL_DIR + '/train')
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data},
         y=train_labels,
-        batch_size=1,
+        batch_size=100,
         num_epochs=None,
         shuffle=True)
     mnist_classifier.train(
         input_fn=train_input_fn,
-        steps=1000)
+        steps=1000,
+        # hooks=[logging_hook, profiler_hook]
+    )
 
     # Evaluate the model and print results
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
@@ -130,7 +139,7 @@ def main(unused_argv):
         y=eval_labels,
         num_epochs=1,
         shuffle=False)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=100)
+    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=500)
     print(eval_results)
 
 

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./run.sh bash -c 'tensorboard --logdir="$CURRENT_MODEL_DIR"'
+./run.sh bash -c 'tensorboard --logdir="/models/$CURRENT_MODEL_NAME"'
