@@ -9,14 +9,18 @@ import numpy as np
 import tensorflow as tf
 
 MODEL_DIR = "../models/mnist"
+VALIDATION_DATA_SIZE = 10000
+
 
 tf.logging.set_verbosity(tf.logging.INFO)
+
+IMAGE_SIZE = 28
 
 def cnn_model_fn(features, labels, mode):
     """Model function for CNN."""
     # Input Layer
     with tf.name_scope("input_layer"):
-        input_layer = tf.reshape(features["x"], [-1, 28, 28, 1])
+        input_layer = tf.reshape(features["x"], [-1, IMAGE_SIZE, IMAGE_SIZE, 1])
 
     # Convolutional Layer #1
     conv1 = tf.layers.conv2d(
@@ -36,9 +40,11 @@ def cnn_model_fn(features, labels, mode):
         name="pool1"
     )
 
+    norm1 = tf.nn.local_response_normalization(pool1, 4, alpha=0.00011, beta=0.75, name="norm1")
+
     # Convolutional Layer #2 and Pooling Layer #2
     conv2 = tf.layers.conv2d(
-        inputs=pool1,
+        inputs=norm1,
         filters=64,
         kernel_size=[5, 5],
         padding="same",
@@ -53,12 +59,14 @@ def cnn_model_fn(features, labels, mode):
         name="pool2"
     )
 
+    norm2 = tf.nn.local_response_normalization(pool2, 4, alpha=0.00011, beta=0.75, name="norm2")
+
     build_layer_summaries("conv1")
     build_layer_summaries("conv2")
 
     # Dense Layer
     with tf.name_scope("dense"):
-        pool2_flat = tf.reshape(pool2, [-1, 7 * 7 * 64], name="pool2_reshape")
+        pool2_flat = tf.reshape(norm2, [-1, 7 * 7 * 64], name="pool2_reshape")
         dense = tf.layers.dense(
             inputs=pool2_flat, units=1024, activation=tf.nn.relu, name="dense")
         dropout = tf.layers.dropout(
@@ -111,7 +119,7 @@ def main(unused_argv):
     eval_data = mnist.test.images  # Returns np.array
     eval_labels = np.asarray(mnist.test.labels, dtype=np.int32)
 
-    clean_dir(MODEL_DIR)
+    # clean_dir(MODEL_DIR)
 
     mnist_classifier = tf.estimator.Estimator(model_fn=cnn_model_fn, model_dir=MODEL_DIR)
 
@@ -124,23 +132,27 @@ def main(unused_argv):
     train_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": train_data},
         y=train_labels,
-        batch_size=100,
+        batch_size=500,
         num_epochs=None,
         shuffle=True)
     mnist_classifier.train(
         input_fn=train_input_fn,
-        steps=1000,
+        steps=5000,
         # hooks=[logging_hook, profiler_hook]
     )
 
     # Evaluate the model and print results
+    # print("LEN?>", len(eval_data),  len(eval_labels))
+
+    batch_size = 1000
+    eval_steps = VALIDATION_DATA_SIZE // batch_size
     eval_input_fn = tf.estimator.inputs.numpy_input_fn(
         x={"x": eval_data},
         y=eval_labels,
-        num_epochs=1,
+        batch_size=batch_size,
         shuffle=False)
-    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=500)
-    print(eval_results)
+    eval_results = mnist_classifier.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+    print("Eval result:", eval_results)
 
 
 if __name__ == "__main__":
