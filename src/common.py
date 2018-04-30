@@ -1,8 +1,110 @@
 import os
 import sys
+import json
+import copy
+import pickle
 import urllib
 import tarfile
+import numpy as np
 import tensorflow as tf
+
+
+def duration_to_string(dur_in_sec=0):
+    days, remainder = divmod(dur_in_sec, 60*60*24)
+    hours, remainder = divmod(remainder, 60*60)
+    minutes, seconds = divmod(remainder, 60)
+    output = ""
+    if days > 0:
+        output += "%d days, " % days
+    if hours > 0:
+        output = "%d hours, " % hours
+    if minutes > 0:
+        output += "%d min, " % minutes
+    if seconds > 0 or len(output) == 0:
+        output += "%.3f sec" % seconds
+    if output[-2:] == ", ":
+        output = output[:-2]
+
+    return output
+
+
+def prepare_images(images, dtype=np.float32):
+    images = np.asarray(images, dtype=dtype)
+    images = np.reshape(images, [images.shape[0], images.shape[1]*images.shape[2]])
+
+    return np.multiply(images, 1.0 / 255.0)
+
+
+def load_mnist(add_distortions=False):
+    (train_x, train_y), (test_x, test_y) = tf.keras.datasets.mnist.load_data()
+
+    if add_distortions:
+        combinations = [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [1, 1],
+        ]
+        with tf.Session() as sess:
+            (x, y) = train_x.shape[1:]
+            img = tf.reshape(train_x, [-1, x, y, 1])
+            cropped = sess.run(tf.image.crop_to_bounding_box(img, 1, 1, x - 1, y - 1))
+            dist_train_x = copy.copy(train_x)
+            dist_train_y = copy.copy(train_y)
+            for i in range(len(combinations)):
+                dist_images = tf.image.pad_to_bounding_box(
+                    cropped, combinations[i][0], combinations[i][1], x, y)
+                dist_images = tf.reshape(dist_images, [-1, x, y])
+                all_labels = tf.concat([dist_train_y, train_y], axis=0)
+                all_images = tf.concat([dist_train_x, dist_images], axis=0)
+
+                dist_train_x = sess.run(all_images)
+                dist_train_y = sess.run(all_labels)
+
+            # train_x = sess.run(tf.concat([train_x, dist_train_x], axis=0))
+            # train_y = sess.run(tf.concat([train_y, dist_train_y], axis=0))
+            train_x = dist_train_x
+            train_y = dist_train_y
+
+    print("a", train_x.shape)
+    train_x = prepare_images(train_x)
+    train_y = np.asarray(train_y, dtype=np.int32)
+
+    test_x = prepare_images(test_x)
+    test_y = np.asarray(test_y, dtype=np.int32)
+
+    return (train_x, train_y), (test_x, test_y)
+
+
+def get_final_eval_result(results=None):
+    res = {"error": "result is missing"}
+    if results is not None and len(results) > 0:
+        res = results[-1].copy()
+        res["accuracy"] = res["accuracy"].item()
+        res["loss"] = res["loss"].item()
+        res["global_step"] = res["global_step"].item()
+
+    return res
+
+
+def save_json(data, filename):
+    with open(filename, 'w') as fp:
+        json.dump(data, fp, sort_keys=True, indent=4)
+
+
+def load_json(filename):
+    with open(filename, 'r') as fp:
+        return json.load(fp)
+
+
+def save_pickle(data, filename):
+    with open(filename, 'wb') as fp:
+        pickle.dump(data, fp, pickle.HIGHEST_PROTOCOL)
+
+
+def load_pickle(filename):
+    with open(filename, 'rb') as fp:
+        return pickle.load(fp)
 
 
 def variable_summaries(var):
@@ -33,6 +135,84 @@ def _track_progress(count, block_size, total_size):
     progress = float(count * block_size) / float(total_size) * 100.0
     sys.stdout.write('\r\t>> Progress %.2f%%' % progress)
     sys.stdout.flush()
+
+
+def mixed_layer(input_layer, name="mixed_layer"):
+    with tf.name_scope(name):
+        with tf.name_scope("branch_1x1"):
+            branch_1x1 = tf.layers.conv2d(
+                inputs=input_layer,
+                filters=32,
+                kernel_size=[1, 1],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv1x1"
+            )
+
+        with tf.name_scope("branch_3x3"):
+            conv1x1_3x3 = tf.layers.conv2d(
+                inputs=input_layer,
+                filters=48,
+                kernel_size=[1, 1],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv1x1"
+            )
+            branch_3x3 = tf.layers.conv2d(
+                inputs=conv1x1_3x3,
+                filters=64,
+                kernel_size=[3, 3],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv3x3"
+            )
+
+        with tf.name_scope("branch_5x5"):
+            conv1x1_5x5 = tf.layers.conv2d(
+                inputs=input_layer,
+                filters=8,
+                kernel_size=[1, 1],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv1x1"
+            )
+            branch_5x5 = tf.layers.conv2d(
+                inputs=conv1x1_5x5,
+                filters=16,
+                kernel_size=[5, 5],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv5x5"
+            )
+
+        with tf.name_scope("branch_max_pool"):
+            pool3x3 = tf.layers.max_pooling2d(
+                inputs=input_layer,
+                pool_size=[3, 3],
+                strides=1,
+                padding="same",
+                name="pool3x3"
+            )
+            branch_max_pool = tf.layers.conv2d(
+                inputs=pool3x3,
+                filters=16,
+                kernel_size=[1, 1],
+                strides=1,
+                padding="same",
+                activation=tf.nn.relu,
+                name="conv1x1"
+            )
+
+        with tf.name_scope("concat_module"):
+            result_layer = tf.concat(
+                axis=3, values=[branch_1x1, branch_3x3, branch_5x5, branch_max_pool])
+
+    return result_layer
 
 
 def maybe_download_and_extract(dest_dir, data_url, nested_dir=""):
