@@ -7,6 +7,7 @@ from common import duration_to_string
 from common import save_pickle
 from common import save_json
 from common import load_mnist
+from common import load_cifar10
 from common import get_final_eval_result
 from common import build_layer_summaries
 
@@ -17,8 +18,8 @@ import numpy as np
 import tensorflow as tf
 
 # GENERAL
-IMAGE_SIZE = 28
-MODEL_DIR = "../models/mnist"
+IMAGE_SIZE = 32
+MODEL_DIR = "../models/cifar10"
 
 EVAL_EVERY_N_TRAIN_STEPS = 1000
 
@@ -26,53 +27,24 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 # TRAINING
 USE_STATIC_LEARNING_RATE = False
-LEARNING_RATE_INITIAL = 0.015
+LEARNING_RATE_INITIAL = 0.05
 LEARNING_RATE_DECAY_RATE = 0.96
-LEARNING_RATE_DECAY_STEPS = 1000
+LEARNING_RATE_DECAY_STEPS = 10000
 
 DROPOUT_RATE = 0.6
-TRAINING_EPOCHS = 1
-TRAINING_STEPS = 1000
-TRAINING_BATCH_SIZE = 500
+TRAINING_EPOCHS = 10
+TRAINING_STEPS = 2000
+TRAINING_BATCH_SIZE = 128
 
 # EVALUATION
-EVAL_BATCH_SIZE = 100
+EVAL_BATCH_SIZE = 500
 VALIDATION_DATA_SIZE = 10000
 EVAL_STEPS = VALIDATION_DATA_SIZE // EVAL_BATCH_SIZE
 
 # MODEL CONFIG
 model_configs = {
-    "test1": {
+    "test3": {
         "skip": False,
-        "conv1": {
-            "filters": 64,
-            "kernel_size": [5, 5],
-            "strides": (1, 1)
-        },
-        "pool1": {
-            "pool_size": [3, 3],
-            "strides": 2
-        },
-        "conv2": {
-            "filters": 172,
-            "kernel_size": [3, 3],
-            "strides": (1, 1)
-        },
-        # "conv3": {
-        #     "filters": 128,
-        #     "kernel_size": [3, 3],
-        #     "strides": (1, 1)
-        # },
-        "pool2": {
-            "pool_size": [3, 3],
-            "strides": 2
-        },
-        "dense1": {
-            "units": 2048
-        },
-        "dense2": {
-            "units": 512
-        }
     }
 }
 
@@ -97,83 +69,116 @@ def get_learning_rate():
 
     return learning_rate
 
-# norm1 = tf.nn.local_response_normalization(pool1, 4, alpha=0.00011, beta=0.75, name="norm1")
-
 
 def model_fn(features, labels, mode, params, config):
     """Model function for CNN."""
-    model_details["params"] = params.copy()
     model_details["model_dir"] = config.model_dir
 
     # Input Layer
     with tf.name_scope("input_layer"):
-        input_layer = tf.reshape(features["x"], [-1, IMAGE_SIZE, IMAGE_SIZE, 1])
+        input_layer = features["x"]
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            def fn(img):
+                dist = tf.random_crop(img, [24, 24, 3])
+                dist = tf.image.random_contrast(dist, lower=0.2, upper=1.8)
+                # dist = tf.image.random_hue(dist, max_delta=0.2)
+                dist = tf.image.random_flip_left_right(dist)
+                # dist = tf.image.random_flip_up_down(dist)
+                return dist
 
-    print(input_layer.shape, features["x"].shape)
+            input_layer = tf.map_fn(
+                fn, input_layer, parallel_iterations=100)
+            input_layer = tf.image.resize_image_with_crop_or_pad(input_layer, 32, 32)
 
-    conv1 = tf.layers.conv2d(
+    conv3x3 = tf.layers.conv2d(
         inputs=input_layer,
-        filters=params["conv1"]["filters"],
-        kernel_size=params["conv1"]["kernel_size"],
-        strides=params["conv1"]["strides"],
-        padding="same",
+        filters=96,
+        kernel_size=[3, 3],
+        strides=1,
+        padding="valid",
         activation=tf.nn.relu,
-        name="conv1"
+        name="conv3x3"
     )
+    # conv5x5 = tf.layers.conv2d(
+    #     inputs=input_layer,
+    #     filters=48,
+    #     kernel_size=[5, 5],
+    #     strides=1,
+    #     padding="same",
+    #     activation=tf.nn.relu,
+    #     name="conv5x5"
+    # )
+    #
+    # mixed = tf.concat([conv3x3, conv5x5], axis=3, name="mixed_layer")
+
     pool1 = tf.layers.max_pooling2d(
-        inputs=conv1,
-        pool_size=params["pool1"]["pool_size"],
-        strides=params["pool1"]["strides"],
+        inputs=conv3x3,
+        pool_size=[2, 2],
+        strides=2,
         name="pool1"
     )
 
     conv2 = tf.layers.conv2d(
         inputs=pool1,
-        filters=params["conv2"]["filters"],
-        kernel_size=params["conv2"]["kernel_size"],
-        strides=params["conv2"]["strides"],
+        filters=128,
+        kernel_size=[5, 5],
+        strides=1,
         padding="same",
         activation=tf.nn.relu,
         name="conv2"
     )
-    # conv3 = tf.layers.conv2d(
-    #     inputs=pool1,
-    #     filters=params["conv3"]["filters"],
-    #     kernel_size=params["conv3"]["kernel_size"],
-    #     strides=params["conv3"]["strides"],
-    #     padding="same",
-    #     activation=tf.nn.relu,
-    #     name="conv3"
-    # )
     pool2 = tf.layers.max_pooling2d(
         inputs=conv2,
-        pool_size=params["pool2"]["pool_size"],
-        strides=params["pool2"]["strides"],
+        pool_size=[2, 2],
+        strides=2,
         name="pool2"
     )
 
-    # build_layer_summaries("conv1")
-    # build_layer_summaries("conv2")
+    conv3 = tf.layers.conv2d(
+        inputs=pool2,
+        filters=256,
+        kernel_size=[3, 3],
+        strides=1,
+        padding="same",
+        activation=tf.nn.relu,
+        name="conv3"
+    )
+    pool3 = tf.layers.max_pooling2d(
+        inputs=conv3,
+        pool_size=[2, 2],
+        strides=2,
+        name="pool3"
+    )
 
-    pool2_flat = tf.reshape(pool2, [-1, np.multiply.reduce(pool2.shape[1:])], name="pool2_reshape")
+    pool_flat = tf.reshape(pool3, [-1, pool3.shape[1]*pool3.shape[2]*pool3.shape[3]], name="pool2_reshape")
 
     # Dense Layer
     dense1 = tf.layers.dense(
-            inputs=pool2_flat, units=params["dense1"]["units"], activation=tf.nn.relu, name="dense1")
+            inputs=pool_flat, units=512, activation=tf.nn.relu, name="dense1")
 
     dense2 = tf.layers.dense(
-            inputs=dense1, units=params["dense2"]["units"], activation=tf.nn.relu, name="dense2")
+            inputs=dense1, units=384, activation=tf.nn.relu, name="dense2")
+
+    dense3 = tf.layers.dense(
+        inputs=dense1, units=256, activation=tf.nn.relu, name="dense3")
 
     # GET MODEL DETAILS
-    model_details["params"]["conv1"]["shape"] = conv1.shape.as_list()
-    model_details["params"]["conv2"]["shape"] = conv2.shape.as_list()
-    model_details["params"]["pool2_flat"] = {"shape": pool2_flat.shape.as_list()}
-    model_details["params"]["dense1"]["shape"] = dense1.shape.as_list()
-    model_details["params"]["dense2"]["shape"] = dense2.shape.as_list()
+    model_details["params"]["conv3x3"] = {"shape": conv3x3.shape.as_list()}
+    # model_details["params"]["conv5x5"] = {"shape": conv5x5.shape.as_list()}
+    # model_details["params"]["mixed"] = {"shape": mixed.shape.as_list()}
+    model_details["params"]["conv2"] = {"shape": conv2.shape.as_list()}
+    model_details["params"]["conv3"] = {"shape": conv3.shape.as_list()}
+    model_details["params"]["pool1"] = {"shape": pool1.shape.as_list()}
+    model_details["params"]["pool2"] = {"shape": pool2.shape.as_list()}
+    model_details["params"]["pool3"] = {"shape": pool3.shape.as_list()}
+    model_details["params"]["pool_flat"] = {"shape": pool_flat.shape.as_list()}
+    model_details["params"]["dense1"] = {"shape": dense1.shape.as_list()}
+    model_details["params"]["dense2"] = {"shape": dense2.shape.as_list()}
+    model_details["params"]["dense3"] = {"shape": dense3.shape.as_list()}
 
     with tf.name_scope("dropout"):
         dropout = tf.layers.dropout(
-            inputs=dense2, rate=DROPOUT_RATE, training=mode == tf.estimator.ModeKeys.TRAIN)
+            inputs=dense3, rate=DROPOUT_RATE, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Logits Layer
     logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
@@ -205,6 +210,7 @@ def model_fn(features, labels, mode, params, config):
 
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate=learning_rate, name="gradient_descent_optimizer")
+        # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name="adam_optimizer")
         train_op = optimizer.minimize(
             loss=loss, global_step=tf.train.get_global_step(), name="minimize_loss")
 
@@ -222,7 +228,7 @@ def main(unused_argv):
     pp = pprint.PrettyPrinter(indent=2, compact=True)
 
     # Load training and eval data
-    (train_x, train_y), (test_x, test_y) = load_mnist()
+    (train_x, train_y), (test_x, test_y) = load_cifar10(add_distortions=True)
 
     print(train_x.shape, train_x.dtype, train_y.shape, train_y.dtype)
     print(test_x.shape, test_x.dtype, test_y.shape, test_y.dtype)
@@ -276,55 +282,62 @@ def main(unused_argv):
         duration = round(time.time() - start_time, 3)
 
         if log_stats:
-            print("Training duration: " + duration_to_string(duration))
+            print("Eval duration: " + duration_to_string(duration))
             print("Eval result:", result)
 
         return result, duration
 
     model_stats_map = {}
-    for conf_name, config in model_configs.items():
+    for params_name, params in model_configs.items():
 
         # if config["skip"]:
         #     continue
 
-        print("RUN CONFIG: %s" % conf_name)
-        model_dir = os.path.join(MODEL_DIR, conf_name)
+        print("RUN PARAMS: %s" % params_name)
+        model_dir = os.path.join(MODEL_DIR, params_name)
 
         # clean_dir(model_dir)
 
-        mnist_classifier = tf.estimator.Estimator(
+        # Reduce GPU memory usage per process
+        sess_config = tf.ConfigProto()
+        # sess_config = tf.ConfigProto(gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.3))
+
+        classifier = tf.estimator.Estimator(
             model_fn=model_fn,
             model_dir=model_dir,
-            params=config
+            params=params,
+            config=tf.estimator.RunConfig(session_config=sess_config)
         )
 
         eval_results = []
         total_train_duration = 0
         total_eval_duration = 0
-        for _ in range(TRAINING_EPOCHS):
-            # train_duration = train_model(mnist_classifier)
-            # total_train_duration += train_duration
+        for i in range(TRAINING_EPOCHS):
+            train_duration = train_model(classifier)
+            total_train_duration += train_duration
 
-            eval_result, eval_duration = eval_model(mnist_classifier)
+            eval_result, eval_duration = eval_model(classifier)
             eval_results.append(eval_result)
             total_eval_duration += eval_duration
+
+            print("Epoch %d of %d completed" % (i, TRAINING_EPOCHS))
 
         final_result = get_final_eval_result(eval_results)
 
         print("Eval results:")
         pp.pprint(eval_results)
-        model_stats_map[conf_name] = {
+        model_stats_map[params_name] = {
             "model_details": model_details,
             "final_result": final_result,
             "total_train_duration": duration_to_string(total_train_duration),
             "total_eval_duration": duration_to_string(total_eval_duration),
         }
         save_pickle(
-            model_stats_map[conf_name],
+            model_stats_map[params_name],
             os.path.join(model_details["model_dir"], "last_result.pkl")
         )
         save_json(
-            model_stats_map[conf_name],
+            model_stats_map[params_name],
             os.path.join(model_details["model_dir"], "last_result.json")
         )
 
