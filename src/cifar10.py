@@ -2,14 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from common import clean_dir
-from common import duration_to_string
-from common import save_pickle
-from common import save_json
-from common import load_mnist
-from common import load_cifar10
-from common import get_final_eval_result
-from common import build_layer_summaries
+import common
+from image import LabeledImage
+import image_dataset as ds
 
 import os
 import time
@@ -18,6 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 # GENERAL
+RANDOM_SEED = 55355
 IMAGE_SIZE = 32
 MODEL_DIR = "../models/cifar10"
 
@@ -32,7 +28,7 @@ LEARNING_RATE_DECAY_RATE = 0.96
 LEARNING_RATE_DECAY_STEPS = 10000
 
 DROPOUT_RATE = 0.6
-TRAINING_EPOCHS = 10
+TRAINING_EPOCHS = 1
 TRAINING_STEPS = 2000
 TRAINING_BATCH_SIZE = 128
 
@@ -77,7 +73,7 @@ def model_fn(features, labels, mode, params, config):
     # Input Layer
     with tf.name_scope("input_layer"):
         input_layer = features["x"]
-        if mode == tf.estimator.ModeKeys.TRAIN:
+        if mode == tf.estimator.ModeKeys.TRAIN and False:
             def fn(img):
                 dist = tf.random_crop(img, [24, 24, 3])
                 dist = tf.image.random_contrast(dist, lower=0.2, upper=1.8)
@@ -224,11 +220,32 @@ def model_fn(features, labels, mode, params, config):
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
+def load_cifar10():
+    train_ds = ds.load_dataset_from_pickles([
+        "/datasets/cifar10/original_train.pkl",
+        "/datasets/cifar10/mirror_train.pkl",
+        "/datasets/cifar10/rand_distorted_train.pkl",
+    ])
+    test_ds = ds.load_dataset_from_pickles([
+        "/datasets/cifar10/original_test.pkl",
+    ])
+
+    offset = 1024
+    img0 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 0 + offset)
+    img1 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 50000 + offset)
+    img2 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 100000 + offset)
+
+    mixed_img = np.concatenate([img0.image, img1.image, img2.image], axis=1)
+    LabeledImage(mixed_img, "mixed_" + img0.name) \
+        .save_image()
+
+    return (train_ds.x, train_ds.y), (test_ds.x, test_ds.y)
+
 def main(unused_argv):
     pp = pprint.PrettyPrinter(indent=2, compact=True)
 
     # Load training and eval data
-    (train_x, train_y), (test_x, test_y) = load_cifar10(add_distortions=True)
+    (train_x, train_y), (test_x, test_y) = load_cifar10()
 
     print(train_x.shape, train_x.dtype, train_y.shape, train_y.dtype)
     print(test_x.shape, test_x.dtype, test_y.shape, test_y.dtype)
@@ -254,7 +271,7 @@ def main(unused_argv):
         duration = round(time.time() - start_time, 3)
 
         if log_stats:
-            print("Training duration: " + duration_to_string(duration))
+            print("Training duration: " + common.duration_to_string(duration))
 
         return duration
 
@@ -282,7 +299,7 @@ def main(unused_argv):
         duration = round(time.time() - start_time, 3)
 
         if log_stats:
-            print("Eval duration: " + duration_to_string(duration))
+            print("Eval duration: " + common.duration_to_string(duration))
             print("Eval result:", result)
 
         return result, duration
@@ -296,7 +313,7 @@ def main(unused_argv):
         print("RUN PARAMS: %s" % params_name)
         model_dir = os.path.join(MODEL_DIR, params_name)
 
-        # clean_dir(model_dir)
+        # common.clean_dir(model_dir)
 
         # Reduce GPU memory usage per process
         sess_config = tf.ConfigProto()
@@ -322,27 +339,27 @@ def main(unused_argv):
 
             print("Epoch %d of %d completed" % (i, TRAINING_EPOCHS))
 
-        final_result = get_final_eval_result(eval_results)
+        final_result = common.get_final_eval_result(eval_results)
 
         print("Eval results:")
         pp.pprint(eval_results)
         model_stats_map[params_name] = {
             "model_details": model_details,
             "final_result": final_result,
-            "total_train_duration": duration_to_string(total_train_duration),
-            "total_eval_duration": duration_to_string(total_eval_duration),
+            "total_train_duration": common.duration_to_string(total_train_duration),
+            "total_eval_duration": common.duration_to_string(total_eval_duration),
         }
-        save_pickle(
+        common.save_pickle(
             model_stats_map[params_name],
             os.path.join(model_details["model_dir"], "last_result.pkl")
         )
-        save_json(
+        common.save_json(
             model_stats_map[params_name],
             os.path.join(model_details["model_dir"], "last_result.json")
         )
 
-        print("Total training duration: " + duration_to_string(total_train_duration))
-        print("Total eval duration: " + duration_to_string(total_eval_duration))
+        print("Total training duration: " + common.duration_to_string(total_train_duration))
+        print("Total eval duration: " + common.duration_to_string(total_eval_duration))
 
     print("Models results:")
     pp.pprint(model_stats_map)

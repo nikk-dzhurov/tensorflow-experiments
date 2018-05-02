@@ -30,41 +30,12 @@ def duration_to_string(dur_in_sec=0):
 
 def prepare_images(images, dtype=np.float32):
     images = np.asarray(images, dtype=dtype)
-    # images = np.reshape(images, [images.shape[0], images.shape[1]*images.shape[2]])
 
     return np.multiply(images, 1.0 / 255.0)
 
 
 def load_mnist(add_distortions=False):
     (train_x, train_y), (test_x, test_y) = tf.keras.datasets.mnist.load_data()
-
-    # if add_distortions:
-    #     combinations = [
-    #         [0, 0],
-    #         [1, 0],
-    #         [0, 1],
-    #         [1, 1],
-    #     ]
-    #     with tf.Session() as sess:
-    #         (x, y) = train_x.shape[1:]
-    #         img = tf.reshape(train_x, [-1, x, y, 1])
-    #         cropped = sess.run(tf.image.crop_to_bounding_box(img, 1, 1, x - 1, y - 1))
-    #         dist_train_x = copy.copy(train_x)
-    #         dist_train_y = copy.copy(train_y)
-    #         for i in range(len(combinations)):
-    #             dist_images = tf.image.pad_to_bounding_box(
-    #                 cropped, combinations[i][0], combinations[i][1], x, y)
-    #             dist_images = tf.reshape(dist_images, [-1, x, y])
-    #             all_labels = tf.concat([dist_train_y, train_y], axis=0)
-    #             all_images = tf.concat([dist_train_x, dist_images], axis=0)
-    #
-    #             dist_train_x = sess.run(all_images)
-    #             dist_train_y = sess.run(all_labels)
-    #
-    #         # train_x = sess.run(tf.concat([train_x, dist_train_x], axis=0))
-    #         # train_y = sess.run(tf.concat([train_y, dist_train_y], axis=0))
-    #         train_x = dist_train_x
-    #         train_y = dist_train_y
 
     print("a", train_x.shape)
     train_x = prepare_images(train_x)
@@ -76,59 +47,14 @@ def load_mnist(add_distortions=False):
     return (train_x, train_y), (test_x, test_y)
 
 
-def load_cifar10(add_distortions=False):
+def load_original_cifar10():
     (train_x, train_y), (test_x, test_y) = tf.keras.datasets.cifar10.load_data()
-
-    # if add_distortions:
-    #     crop_per_side = 4
-    #     crop_per_dim = 2*crop_per_side
-    #     combinations = [
-    #         # [0, 0],
-    #         [crop_per_dim, 0],
-    #         [0, crop_per_dim],
-    #         # [crop_per_dim, crop_per_dim],
-    #     ]
-    #     with tf.Session() as sess:
-    #         (x, y) = train_x.shape[1:3]
-    #         img = train_x
-    #         cropped = sess.run(tf.image.crop_to_bounding_box(
-    #             img, crop_per_side, crop_per_side, x - crop_per_dim, y - crop_per_dim))
-    #         dist_train_x = copy.copy(train_x)
-    #         dist_train_y = copy.copy(train_y)
-    #         for i in range(len(combinations)):
-    #             dist_images = tf.image.pad_to_bounding_box(
-    #                 cropped, combinations[i][0], combinations[i][1], x, y)
-    #             # dist_images = tf.reshape(dist_images, [-1, x, y])
-    #             all_labels = tf.concat([dist_train_y, train_y], axis=0)
-    #             all_images = tf.concat([dist_train_x, dist_images], axis=0)
-    #
-    #             dist_train_x = sess.run(all_images)
-    #             dist_train_y = sess.run(all_labels)
-    #
-    #         # train_x = sess.run(tf.concat([train_x, dist_train_x], axis=0))
-    #         # train_y = sess.run(tf.concat([train_y, dist_train_y], axis=0))
-    #         train_x = dist_train_x
-    #         train_y = dist_train_y
-    # with tf.Session() as sess:
-    #     # tmp = None
-    #     def fn(img):
-    #         dist = tf.image.random_contrast(img, lower=0.5, upper=1.5)
-    #         # dist = tf.image.random_flip_up_down(dist)
-    #         return tf.image.random_flip_left_right(dist)
-    #
-    #
-    #     train_x = sess.run(tf.map_fn(
-    #         fn,
-    #         train_x, parallel_iterations=1000))
-
-        # sess.close()
 
     train_x = prepare_images(train_x)
     train_y = np.asarray(train_y, dtype=np.int32)
 
     test_x = prepare_images(test_x)
     test_y = np.asarray(test_y, dtype=np.int32)
-
 
     return (train_x, train_y), (test_x, test_y)
 
@@ -147,6 +73,7 @@ def get_final_eval_result(results=None):
 def save_json(data, filename):
     with open(filename, 'w') as fp:
         json.dump(data, fp, sort_keys=True, indent=4)
+        print("%s saved" % filename)
 
 
 def load_json(filename):
@@ -157,6 +84,7 @@ def load_json(filename):
 def save_pickle(data, filename):
     with open(filename, 'wb') as fp:
         pickle.dump(data, fp, pickle.HIGHEST_PROTOCOL)
+        print("%s saved" % filename)
 
 
 def load_pickle(filename):
@@ -273,6 +201,12 @@ def mixed_layer(input_layer, name="mixed_layer"):
 
 
 def maybe_download_and_extract(dest_dir, data_url, nested_dir=""):
+    # Example usage:
+    # maybe_download_and_extract(
+    #     dest_dir=os.path.join(os.getcwd(), "test-data"),
+    #     data_url='https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz',
+    #     nested_dir='cifar-10-batches-bin'
+    # )
     """Download and extract data from tarball"""
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)
