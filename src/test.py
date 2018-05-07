@@ -12,6 +12,8 @@ import image_dataset as ds
 
 RANDOM_SEED = 55355
 
-train, test = common.load_original_cifar10()
-ds.improve_dataset(train, test, "cifar10", seed=RANDOM_SEED, save_location="../datasets")
+train, test = common.load_original_stl10()
+
+
+# ds.improve_dataset(train, test, "stl10", crop_shape=(72, 72, 3), target_size=96, rand_dist_sets=3, seed=RANDOM_SEED, save_location="../datasets")
 

@@ -11,6 +11,9 @@ class ImageDataset(object):
         self.x = data
         self.y = labels
 
+        self.dist_batch_size = 500
+        self.parallel_iterations = 100
+
     def save_to_pickle(self, name="dataset.pkl"):
         common.save_pickle(self, name)
 
@@ -23,26 +26,19 @@ class ImageDataset(object):
 
     def mirror_images(self):
         with tf.Session() as sess:
-            batch_size = 5000
             mirror_x = None
             data_len = len(self.x)
-            steps = data_len // batch_size
-            if data_len % batch_size:
+            steps = data_len // self.dist_batch_size
+            if data_len % self.dist_batch_size:
                 steps += 1
 
             for i in range(steps):
-                start_idx = i * batch_size
-                end_idx = start_idx + batch_size
-
-                if data_len >= end_idx:
-                    batch = self.x[start_idx:end_idx]
-                else:
-                    batch = self.x[start_idx:-1]
+                batch = self._get_current_batch(data_len, i)
 
                 partial_data = sess.run(tf.map_fn(
                     fn=lambda img: tf.image.flip_left_right(img),
                     elems=batch,
-                    parallel_iterations=1000
+                    parallel_iterations=self.parallel_iterations
                 ))
 
                 if mirror_x is None:
@@ -50,30 +46,26 @@ class ImageDataset(object):
                 else:
                     mirror_x = np.concatenate([mirror_x, partial_data], axis=0)
 
+            print(mirror_x.shape)
+
             return ImageDataset(mirror_x, self.y.copy())
 
-    def randomly_distort_images(self, seed=None):
+    def randomly_distort_images(self, crop_shape, target_size, seed=None):
         with tf.Session() as sess:
-            batch_size = 5000
             random_dist_data = None
             data_len = len(self.x)
-            steps = data_len // batch_size
-            if data_len % batch_size:
+            steps = data_len // self.dist_batch_size
+            if data_len % self.dist_batch_size:
                 steps += 1
 
             for i in range(steps):
-                start_idx = i * batch_size
-                end_idx = start_idx + batch_size
-
-                if data_len >= end_idx:
-                    batch = self.x[start_idx:end_idx]
-                else:
-                    batch = self.x[start_idx:-1]
+                batch = self._get_current_batch(data_len, i)
 
                 partial_data = sess.run(tf.map_fn(
-                    fn=lambda img: image.randomly_distort_image(img, seed=seed),
+                    fn=lambda img: image.randomly_distort_image(
+                        img, crop_shape=crop_shape, target_size=target_size, seed=seed),
                     elems=batch,
-                    parallel_iterations=1000
+                    parallel_iterations=self.parallel_iterations
                 ))
 
                 if random_dist_data is None:
@@ -81,10 +73,18 @@ class ImageDataset(object):
                 else:
                     random_dist_data = np.concatenate([random_dist_data, partial_data], axis=0)
 
+            print(random_dist_data.shape)
+
             return ImageDataset(random_dist_data, self.y.copy())
 
+    def _get_current_batch(self, data_len, curr_step):
+        start_idx = curr_step * self.dist_batch_size
+        end_idx = start_idx + self.dist_batch_size
 
-def improve_dataset(train, test, dataset_name="dataset_name", seed=None, save_location=None):
+        return self.x[start_idx:end_idx]
+
+
+def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3), target_size=32, rand_dist_sets=1, seed=None, save_location=None):
     # EXAMPLE USAGE FOR CIFAR10
     # train, test = tf.keras.datasets.cifar10.load_data()
     # improve_dataset(train, test, "cifar10", seed=RANDOM_SEED, save_location="../datasets")
@@ -113,14 +113,21 @@ def improve_dataset(train, test, dataset_name="dataset_name", seed=None, save_lo
         os.path.join(save_location, "original_train.pkl"))
 
     # mirror images in the dataset
-    mirror_ds = train_ds.mirror_images()
-    mirror_ds.save_to_pickle(
+    train_ds.mirror_images().save_to_pickle(
         os.path.join(save_location, "mirror_train.pkl"))
 
     # randomly distort images in the dataset
-    random_dist_ds = train_ds.randomly_distort_images(seed=seed)
-    random_dist_ds.save_to_pickle(
-        os.path.join(save_location, "rand_distorted_train.pkl"))
+    if rand_dist_sets > 1:
+        for i in range(rand_dist_sets):
+            train_ds.randomly_distort_images(
+                seed=seed+i, crop_shape=crop_shape, target_size=target_size)\
+                .save_to_pickle(
+                os.path.join(save_location, "rand_distorted_train_%d.pkl" % i))
+    else:
+        train_ds.randomly_distort_images(
+            seed=seed, crop_shape=crop_shape, target_size=target_size)\
+            .save_to_pickle(
+            os.path.join(save_location, "rand_distorted_train.pkl"))
 
     print("Improving dataset is completed")
 

@@ -3,3 +3,4 @@ models/
 datasets/
 src/MNIST-data/
 src/__pycache__/
+src/data/

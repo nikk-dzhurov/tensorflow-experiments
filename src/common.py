@@ -8,6 +8,8 @@ import tarfile
 import numpy as np
 import tensorflow as tf
 
+from image import LabeledImage
+
 
 def duration_to_string(dur_in_sec=0):
     days, remainder = divmod(dur_in_sec, 60*60*24)
@@ -34,10 +36,51 @@ def prepare_images(images, dtype=np.float32):
     return np.multiply(images, 1.0 / 255.0)
 
 
-def load_mnist(add_distortions=False):
+def load_original_stl10():
+    maybe_download_and_extract(
+        dest_dir="./data",
+        data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
+        nested_dir="stl10_binary"
+    )
+
+    # data paths
+    train_x_path = './data/stl10_binary/train_X.bin'
+    train_y_path ='./data/stl10_binary/train_y.bin'
+
+    test_x_path = './data/stl10_binary/test_X.bin'
+    test_y_path ='./data/stl10_binary/test_y.bin'
+
+    def read_labels(path_to_labels):
+        with open(path_to_labels, 'rb') as f:
+            return np.fromfile(f, dtype=np.uint8)
+
+    def read_images(path_to_data):
+        with open(path_to_data, 'rb') as f:
+            everything = np.fromfile(f, dtype=np.uint8)
+            images = np.reshape(everything, (-1, 3, 96, 96))
+
+            return np.transpose(images, (0, 3, 2, 1))
+
+    # load images/labels from binary file
+    train_x = read_images(train_x_path)
+    train_y = read_labels(train_y_path)
+
+    test_x = read_images(test_x_path)
+    test_y = read_labels(test_y_path)
+
+    # prepare images/labels for training
+    train_x = prepare_images(train_x)
+    train_y = np.asarray(train_y, dtype=np.int32)
+
+    test_x = prepare_images(test_x)
+    test_y = np.asarray(test_y, dtype=np.int32)
+
+    return (train_x, train_y), (test_x, test_y)
+
+
+def load_original_mnist():
     (train_x, train_y), (test_x, test_y) = tf.keras.datasets.mnist.load_data()
 
-    print("a", train_x.shape)
     train_x = prepare_images(train_x)
     train_y = np.asarray(train_y, dtype=np.int32)
 
@@ -200,12 +243,12 @@ def mixed_layer(input_layer, name="mixed_layer"):
     return result_layer
 
 
-def maybe_download_and_extract(dest_dir, data_url, nested_dir=""):
+def maybe_download_and_extract(dest_dir, data_url, nested_dir):
     # Example usage:
     # maybe_download_and_extract(
-    #     dest_dir=os.path.join(os.getcwd(), "test-data"),
+    #     dest_dir="./test-data",
     #     data_url='https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz',
-    #     nested_dir='cifar-10-batches-bin'
+    #     nested_dir=os.path.join(os.getcwd(), "test-data/cifar-10-batches-bin")
     # )
     """Download and extract data from tarball"""
     if not os.path.exists(dest_dir):
