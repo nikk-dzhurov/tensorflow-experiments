@@ -102,6 +102,23 @@ def load_original_cifar10():
     return (train_x, train_y), (test_x, test_y)
 
 
+def get_learning_rate_from_flags(flags):
+    if flags.use_static_learning_rate:
+        learning_rate = flags.initial_learning_rate
+    else:
+        learning_rate = tf.train.exponential_decay(
+            learning_rate=flags.initial_learning_rate,
+            global_step=tf.train.get_global_step(),
+            decay_steps=flags.learning_rate_decay_steps,
+            decay_rate=flags.learning_rate_decay_rate,
+            name="learning_rate"
+        )
+
+    tf.summary.scalar("learning_rate", learning_rate)
+
+    return learning_rate
+
+
 def get_final_eval_result(results=None):
     res = {"error": "result is missing"}
     if results is not None and len(results) > 0:
