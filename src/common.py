@@ -5,10 +5,40 @@ import copy
 import pickle
 import urllib
 import tarfile
+import argparse
 import numpy as np
 import tensorflow as tf
 
 from image import LabeledImage
+
+TRAIN_EVAL_MODE = "train_eval"
+
+
+def parse_known_args(argv):
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        '--clean',
+        type=bool,
+        default=False,
+        help="Remove all model data and start new training"
+    )
+    parser.add_argument(
+        '--mode',
+        type=str,
+        default=tf.estimator.ModeKeys.TRAIN,
+        help="Model mode"
+    )
+    parser.add_argument(
+        '--image_file',
+        type=str,
+        default='',
+        help='Absolute path to image file.'
+    )
+
+    parsed_args, _ = parser.parse_known_args()
+
+    return parsed_args
 
 
 def duration_to_string(dur_in_sec=0):
@@ -34,48 +64,6 @@ def prepare_images(images, dtype=np.float32):
     images = np.asarray(images, dtype=dtype)
 
     return np.multiply(images, 1.0 / 255.0)
-
-
-def load_original_stl10():
-    maybe_download_and_extract(
-        dest_dir="./data",
-        data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
-        nested_dir="stl10_binary"
-    )
-
-    # data paths
-    train_x_path = './data/stl10_binary/train_X.bin'
-    train_y_path ='./data/stl10_binary/train_y.bin'
-
-    test_x_path = './data/stl10_binary/test_X.bin'
-    test_y_path ='./data/stl10_binary/test_y.bin'
-
-    def read_labels(path_to_labels):
-        with open(path_to_labels, 'rb') as f:
-            return np.fromfile(f, dtype=np.uint8)
-
-    def read_images(path_to_data):
-        with open(path_to_data, 'rb') as f:
-            everything = np.fromfile(f, dtype=np.uint8)
-            images = np.reshape(everything, (-1, 3, 96, 96))
-
-            return np.transpose(images, (0, 3, 2, 1))
-
-    # load images/labels from binary file
-    train_x = read_images(train_x_path)
-    train_y = read_labels(train_y_path)
-
-    test_x = read_images(test_x_path)
-    test_y = read_labels(test_y_path)
-
-    # prepare images/labels for training
-    train_x = prepare_images(train_x)
-    train_y = np.asarray(train_y, dtype=np.int32)
-
-    test_x = prepare_images(test_x)
-    test_y = np.asarray(test_y, dtype=np.int32)
-
-    return (train_x, train_y), (test_x, test_y)
 
 
 def load_original_mnist():
@@ -113,8 +101,6 @@ def get_learning_rate_from_flags(flags):
             decay_rate=flags.learning_rate_decay_rate,
             name="learning_rate"
         )
-
-    tf.summary.scalar("learning_rate", learning_rate)
 
     return learning_rate
 

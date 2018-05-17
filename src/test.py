@@ -10,10 +10,4 @@ import tensorflow as tf
 import common
 import image_dataset as ds
 
-RANDOM_SEED = 55355
-
-train, test = common.load_original_stl10()
-
-
-# ds.improve_dataset(train, test, "stl10", crop_shape=(72, 72, 3), target_size=96, rand_dist_sets=3, seed=RANDOM_SEED, save_location="../datasets")
-
+print("Just test")

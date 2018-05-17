@@ -2,77 +2,130 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import common
-from image import LabeledImage
-import image_dataset as ds
-
 import os
 import time
 import pprint
 import numpy as np
 import tensorflow as tf
 
-# GENERAL
-IMAGE_SIZE = 96
-MODEL_DIR = "../models/stl10"
-
-EVAL_EVERY_N_TRAIN_STEPS = 1000
-
-tf.logging.set_verbosity(tf.logging.INFO)
-
-# TRAINING
-USE_STATIC_LEARNING_RATE = False
-LEARNING_RATE_INITIAL = 0.05
-LEARNING_RATE_DECAY_RATE = 0.96
-LEARNING_RATE_DECAY_STEPS = 10000
-
-DROPOUT_RATE = 0.4
-TRAINING_EPOCHS = 12
-TRAINING_STEPS = 2000
-TRAINING_BATCH_SIZE = 128
-
-# EVALUATION
-EVAL_BATCH_SIZE = 500
-VALIDATION_DATA_SIZE = 8000
-EVAL_STEPS = VALIDATION_DATA_SIZE // EVAL_BATCH_SIZE
-
-# MODEL CONFIG
-model_configs = {
-    "test1": {
-        "skip": False,
-    }
-}
-
-model_details = {
-    "params": {}
-}
+import common
+from image import LabeledImage
+from image_dataset import ImageDataset
+import image_dataset as ds
 
 
-def get_learning_rate():
-    if USE_STATIC_LEARNING_RATE:
-        learning_rate = LEARNING_RATE_INITIAL
-    else:
-        learning_rate = tf.train.exponential_decay(
-            learning_rate=LEARNING_RATE_INITIAL,
-            global_step=tf.train.get_global_step(),
-            decay_steps=LEARNING_RATE_DECAY_STEPS,
-            decay_rate=LEARNING_RATE_DECAY_RATE,
-            name="learning_rate"
-        )
+def build_app_flags():
+    # Hyperparameters for the model training/evaluation
+    # They are accessible everywhere in the application via tf.app.flags.FLAGS
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/test16",
+                               "Model checkpoint/training/evaluation data directory")
+    tf.app.flags.DEFINE_float("dropout_rate", 0.4,
+                              "Dropout rate for model training")
+    tf.app.flags.DEFINE_integer("eval_batch_size", 16,
+                                "Evaluation data batch size")
+    tf.app.flags.DEFINE_integer("train_batch_size", 2,
+                                "Training data batch size")
+    tf.app.flags.DEFINE_float("initial_learning_rate", 0.05,
+                              "Initial value for learning rate")
+    tf.app.flags.DEFINE_bool("use_static_learning_rate", False,
+                             "Flag that determines if learning rate should be constant value")
+    tf.app.flags.DEFINE_float("learning_rate_decay_rate", 0.96,
+                              "Learning rate decay rate")
+    tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 5000,
+                                "Learning rate decay steps")
+    tf.app.flags.DEFINE_bool("ignore_gpu", False,
+                             "Flag that determines if gpu should be disabled")
+    tf.app.flags.DEFINE_float("per_process_gpu_memory_fraction", 1.0,
+                              "Fraction of gpu memory to be used")
 
-    tf.summary.scalar("learning_rate", learning_rate)
 
-    return learning_rate
+def get_model_params():
+    return {"add_layer_summaries": True}
+
+
+def load_train_dataset():
+    dataset = ImageDataset.load_dataset_from_pickles([
+        "/datasets/stl10/original_train.pkl",
+        "/datasets/stl10/mirror_train.pkl",
+        "/datasets/stl10/rand_distorted_train.pkl",
+        # "/datasets/stl10/rand_distorted_train_0.pkl",
+        # "/datasets/stl10/rand_distorted_train_1.pkl",
+        # "/datasets/stl10/rand_distorted_train_2.pkl",
+    ])
+
+    return dataset.x, np.add(dataset.y, -1)
+
+
+def load_predict_dataset():
+    dataset = ImageDataset.load_dataset_from_pickles([
+        "/datasets/stl10/original_test.pkl",
+    ])
+
+    return dataset.x, np.add(dataset.y, -1)
+
+
+def load_eval_dataset():
+    dataset = ImageDataset.load_dataset_from_pickles([
+        "/datasets/stl10/original_test.pkl",
+    ])
+
+    return dataset.x, np.add(dataset.y, -1)
+
+
+def load_original():
+    common.maybe_download_and_extract(
+        dest_dir="./data",
+        data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
+        nested_dir="stl10_binary"
+    )
+
+    # data paths
+    train_x_path = './data/stl10_binary/train_X.bin'
+    train_y_path = './data/stl10_binary/train_y.bin'
+
+    test_x_path = './data/stl10_binary/test_X.bin'
+    test_y_path = './data/stl10_binary/test_y.bin'
+
+    def read_labels(path_to_labels):
+        with open(path_to_labels, 'rb') as f:
+            return np.fromfile(f, dtype=np.uint8)
+
+    def read_images(path_to_data):
+        with open(path_to_data, 'rb') as f:
+            everything = np.fromfile(f, dtype=np.uint8)
+            images = np.reshape(everything, (-1, 3, 96, 96))
+
+            return np.transpose(images, (0, 3, 2, 1))
+
+    # load images/labels from binary file
+    train_x = read_images(train_x_path)
+    train_y = read_labels(train_y_path)
+
+    test_x = read_images(test_x_path)
+    test_y = read_labels(test_y_path)
+
+    # prepare images/labels for training
+    train_x = common.prepare_images(train_x)
+    train_y = np.asarray(train_y, dtype=np.int32)
+
+    test_x = common.prepare_images(test_x)
+    test_y = np.asarray(test_y, dtype=np.int32)
+
+    return (train_x, train_y), (test_x, test_y)
 
 
 def model_fn(features, labels, mode, params, config):
     """Model function for CNN."""
-    model_details["model_dir"] = config.model_dir
+
+    app_flags = tf.app.flags.FLAGS
+
+    print("Model directory: " + config.model_dir)
 
     # Input Layer
     with tf.name_scope("input_layer"):
         input_layer = features["x"]
 
+    # Convolution 1
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
         filters=96,
@@ -80,7 +133,7 @@ def model_fn(features, labels, mode, params, config):
         strides=2,
         padding="same",
         activation=tf.nn.relu,
-        name="conv3x3"
+        name="conv1"
     )
 
     pool1 = tf.layers.max_pooling2d(
@@ -91,6 +144,7 @@ def model_fn(features, labels, mode, params, config):
         name="pool1"
     )
 
+    # Convolution 2
     conv2 = tf.layers.conv2d(
         inputs=pool1,
         filters=128,
@@ -107,6 +161,7 @@ def model_fn(features, labels, mode, params, config):
         name="pool2"
     )
 
+    # Convolution 3
     conv3 = tf.layers.conv2d(
         inputs=pool2,
         filters=172,
@@ -123,6 +178,7 @@ def model_fn(features, labels, mode, params, config):
         name="pool3"
     )
 
+    # Convolution 4
     conv4 = tf.layers.conv2d(
         inputs=pool3,
         filters=256,
@@ -132,42 +188,41 @@ def model_fn(features, labels, mode, params, config):
         activation=tf.nn.relu,
         name="conv4"
     )
-    # pool4 = tf.layers.max_pooling2d(
-    #     inputs=conv4,
-    #     pool_size=[2, 2],
-    #     strides=2,
-    #     name="pool4"
-    # )
 
-    pool_flat = tf.reshape(conv4, [-1, conv4.shape[1]*conv4.shape[2]*conv4.shape[3]], name="pool_flat")
+    # Flatten output of the last convolution
+    pool_flat = tf.reshape(
+        conv4, [-1, conv4.shape[1]*conv4.shape[2]*conv4.shape[3]], name="pool_flat")
 
-    # Dense Layer
+    # Dense Layers
     dense1 = tf.layers.dense(
-            inputs=pool_flat, units=1024, activation=tf.nn.relu, name="dense1")
+        inputs=pool_flat,
+        units=1024,
+        activation=tf.nn.relu,
+        name="dense1"
+    )
 
     dense2 = tf.layers.dense(
-            inputs=dense1, units=512, activation=tf.nn.relu, name="dense2")
+        inputs=dense1,
+        units=512,
+        activation=tf.nn.relu,
+        name="dense2"
+    )
 
     dense3 = tf.layers.dense(
-        inputs=dense1, units=256, activation=tf.nn.relu, name="dense3")
+        inputs=dense2,
+        units=256,
+        activation=tf.nn.relu,
+        name="dense3"
+    )
 
-    # GET MODEL DETAILS
-    model_details["params"]["conv1"] = {"shape": conv1.shape.as_list()}
-    model_details["params"]["conv2"] = {"shape": conv2.shape.as_list()}
-    model_details["params"]["conv3"] = {"shape": conv3.shape.as_list()}
-    model_details["params"]["conv4"] = {"shape": conv4.shape.as_list()}
-    model_details["params"]["pool1"] = {"shape": pool1.shape.as_list()}
-    model_details["params"]["pool2"] = {"shape": pool2.shape.as_list()}
-    model_details["params"]["pool3"] = {"shape": pool3.shape.as_list()}
-    # model_details["params"]["pool4"] = {"shape": pool4.shape.as_list()}
-    model_details["params"]["pool_flat"] = {"shape": pool_flat.shape.as_list()}
-    model_details["params"]["dense1"] = {"shape": dense1.shape.as_list()}
-    model_details["params"]["dense2"] = {"shape": dense2.shape.as_list()}
-    model_details["params"]["dense3"] = {"shape": dense3.shape.as_list()}
+    if params.get("add_layer_summaries", False) is True:
+        weighted_layers_names = ["conv1", "conv2", "conv3", "conv4", "dense1", "dense2", "dense3"]
+        for layer_name in weighted_layers_names:
+            common.build_layer_summaries(layer_name)
 
     with tf.name_scope("dropout"):
         dropout = tf.layers.dropout(
-            inputs=dense3, rate=DROPOUT_RATE, training=mode == tf.estimator.ModeKeys.TRAIN)
+            inputs=dense3, rate=app_flags.dropout_rate, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Logits Layer
     logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
@@ -192,7 +247,7 @@ def model_fn(features, labels, mode, params, config):
 
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
-        learning_rate = get_learning_rate()
+        learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
 
         summary_saver = tf.train.SummarySaverHook(
             save_steps=50, output_dir=config.model_dir + "/train", summary_op=tf.summary.merge_all())
@@ -210,170 +265,20 @@ def model_fn(features, labels, mode, params, config):
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
     }
+
     return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
-def load_stl10():
-    train_ds = ds.load_dataset_from_pickles([
-        "/datasets/stl10/original_train.pkl",
-        "/datasets/stl10/mirror_train.pkl",
-        "/datasets/stl10/rand_distorted_train_0.pkl",
-        "/datasets/stl10/rand_distorted_train_1.pkl",
-        "/datasets/stl10/rand_distorted_train_2.pkl",
-    ])
-    test_ds = ds.load_dataset_from_pickles([
-        "/datasets/stl10/original_test.pkl",
-    ])
-
-    offset = 1024
-    img0 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 0 + offset)
-    img1 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 5000 + offset)
-    img2 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 10000 + offset)
-    img3 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 15000 + offset)
-    img4 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 20000 + offset)
-
-    mixed_img = np.concatenate(
-        [img0.image, img1.image, img2.image, img3.image, img4.image], axis=1)
-    LabeledImage(mixed_img, "mixed").save_image()
-
-    # rsh = np.reshape(train_ds.x[0:100], (-1))
-    # print(rsh.shape)
-    # assert all(it >= 0 and it <=1 for it in rsh)
-    # rsh = np.reshape(np.add(train_ds.y, -1), (-1))
-    # print(rsh.shape)
-    # assert all(it >= 0 and it <=9 for it in rsh)
-
-    # assert not np.any(np.is(train_ds.x))
-    # assert not np.any(np.isnan(test_ds.x))
-    # assert not np.any(np.isnan(train_ds.y))
-    # assert not np.any(np.isnan(test_ds.y))
-
-    return (train_ds.x, np.add(train_ds.y, -1)), (test_ds.x, np.add(test_ds.y, -1))
-
-def main(unused_argv):
-    pp = pprint.PrettyPrinter(indent=2, compact=True)
-
-    # Load training and eval data
-    (train_x, train_y), (test_x, test_y) = load_stl10()
-
-    print(train_x.shape, train_x.dtype, train_y.shape, train_y.dtype)
-    print(test_x.shape, test_x.dtype, test_y.shape, test_y.dtype)
-
-    def train_model(classifier, log_stats=True):
-        start_time = time.time()
-
-        # Train the model
-        # profiler_hook = tf.train.ProfilerHook(save_steps=50, output_dir=MODEL_DIR + '/train')
-
-        train_input_fn = tf.estimator.inputs.numpy_input_fn(
-            x={"x": train_x},
-            y=train_y,
-            batch_size=TRAINING_BATCH_SIZE,
-            num_epochs=None,
-            shuffle=True
-        )
-        classifier.train(
-            input_fn=train_input_fn,
-            steps=TRAINING_STEPS,
-            # hooks=[profiler_hook]
-        )
-        duration = round(time.time() - start_time, 3)
-
-        if log_stats:
-            print("Training duration: " + common.duration_to_string(duration))
-
-        return duration
-
-    def eval_model(classifier, log_stats=True):
-        start_time = time.time()
-
-        tensors_to_log = {
-            # "probabilities": "softmax_tensor",
-            "pred": "diff"
-        }
-        logging_hook = tf.train.LoggingTensorHook(
-            tensors=tensors_to_log, every_n_iter=1)
-
-        eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-            x={"x": test_x},
-            y=test_y,
-            batch_size=EVAL_BATCH_SIZE,
-            shuffle=False
-        )
-        result = classifier.evaluate(
-            input_fn=eval_input_fn,
-            steps=EVAL_STEPS,
-            # hooks=[logging_hook]
-        )
-        duration = round(time.time() - start_time, 3)
-
-        if log_stats:
-            print("Eval duration: " + common.duration_to_string(duration))
-            print("Eval result:", result)
-
-        return result, duration
-
-    model_stats_map = {}
-    for params_name, params in model_configs.items():
-
-        # if config["skip"]:
-        #     continue
-
-        print("RUN PARAMS: %s" % params_name)
-        model_dir = os.path.join(MODEL_DIR, params_name)
-
-        # common.clean_dir(model_dir)
-
-        # Reduce GPU memory usage per process
-        sess_config = tf.ConfigProto()
-        # sess_config = tf.ConfigProto(device_count={'GPU': 0})
-        # sess_config = tf.ConfigProto(gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.3))
-
-        classifier = tf.estimator.Estimator(
-            model_fn=model_fn,
-            model_dir=model_dir,
-            params=params,
-            config=tf.estimator.RunConfig(session_config=sess_config)
-        )
-
-        eval_results = []
-        total_train_duration = 0
-        total_eval_duration = 0
-        for i in range(TRAINING_EPOCHS):
-            train_duration = train_model(classifier)
-            total_train_duration += train_duration
-
-            eval_result, eval_duration = eval_model(classifier)
-            eval_results.append(eval_result)
-            total_eval_duration += eval_duration
-
-            print("Epoch %d of %d completed" % (i, TRAINING_EPOCHS))
-
-        final_result = common.get_final_eval_result(eval_results)
-
-        print("Eval results:")
-        pp.pprint(eval_results)
-        model_stats_map[params_name] = {
-            "model_details": model_details,
-            "final_result": final_result,
-            "total_train_duration": common.duration_to_string(total_train_duration),
-            "total_eval_duration": common.duration_to_string(total_eval_duration),
-        }
-        common.save_pickle(
-            model_stats_map[params_name],
-            os.path.join(model_details["model_dir"], "last_result.pkl")
-        )
-        common.save_json(
-            model_stats_map[params_name],
-            os.path.join(model_details["model_dir"], "last_result.json")
-        )
-
-        print("Total training duration: " + common.duration_to_string(total_train_duration))
-        print("Total eval duration: " + common.duration_to_string(total_eval_duration))
-
-    print("Models results:")
-    pp.pprint(model_stats_map)
-
-
 if __name__ == "__main__":
-    tf.app.run(main=main)
+    train, test = load_original()
+
+    ds.improve_dataset(
+        train,
+        test,
+        "stl10",
+        crop_shape=(72, 72, 3),
+        target_size=96,
+        rand_dist_sets=1,
+        save_location="../datasets"
+    )
+

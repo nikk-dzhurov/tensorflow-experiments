@@ -6,6 +6,8 @@ import common
 import image
 
 
+RANDOM_SEED = 55355
+
 class ImageDataset(object):
     def __init__(self, data, labels):
         self.x = data
@@ -13,6 +15,20 @@ class ImageDataset(object):
 
         self.dist_batch_size = 500
         self.parallel_iterations = 100
+
+    @staticmethod
+    def load_from_pickles(pickle_locations):
+        result = None
+        length = len(pickle_locations)
+        for i in range(length):
+            ds = common.load_pickle(pickle_locations[i])
+            if result is None:
+                result = ds
+            else:
+                result.x = np.concatenate([result.x, ds.x], axis=0)
+                result.y = np.concatenate([result.y, ds.y], axis=0)
+
+        return result
 
     def save_to_pickle(self, name="dataset.pkl"):
         common.save_pickle(self, name)
@@ -32,8 +48,8 @@ class ImageDataset(object):
             if data_len % self.dist_batch_size:
                 steps += 1
 
-            for i in range(steps):
-                batch = self._get_current_batch(data_len, i)
+            for step in range(steps):
+                batch = self._get_current_batch(step)
 
                 partial_data = sess.run(tf.map_fn(
                     fn=lambda img: tf.image.flip_left_right(img),
@@ -58,8 +74,8 @@ class ImageDataset(object):
             if data_len % self.dist_batch_size:
                 steps += 1
 
-            for i in range(steps):
-                batch = self._get_current_batch(data_len, i)
+            for step in range(steps):
+                batch = self._get_current_batch(step)
 
                 partial_data = sess.run(tf.map_fn(
                     fn=lambda img: image.randomly_distort_image(
@@ -77,14 +93,14 @@ class ImageDataset(object):
 
             return ImageDataset(random_dist_data, self.y.copy())
 
-    def _get_current_batch(self, data_len, curr_step):
+    def _get_current_batch(self, curr_step):
         start_idx = curr_step * self.dist_batch_size
         end_idx = start_idx + self.dist_batch_size
 
         return self.x[start_idx:end_idx]
 
 
-def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3), target_size=32, rand_dist_sets=1, seed=None, save_location=None):
+def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3), target_size=32, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
     # EXAMPLE USAGE FOR CIFAR10
     # train, test = tf.keras.datasets.cifar10.load_data()
     # improve_dataset(train, test, "cifar10", seed=RANDOM_SEED, save_location="../datasets")
@@ -132,34 +148,3 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
     print("Improving dataset is completed")
 
 
-def load_dataset_from_pickles(pickle_locations):
-    # EXAMPLE USAGE FOR CIFAR10
-    # pickles = [
-    #     "/datasets/cifar10/original_train.pkl",
-    #     "/datasets/cifar10/mirror_train.pkl",
-    #     "/datasets/cifar10/rand_distorted_train.pkl",
-    # ]
-    #
-    # ds = load_dataset_from_pickles(pickles)
-    #
-    # # # load and save image
-    # offset = 555
-    # img0 = LabeledImage().load_from_dataset_tuple((ds.x, ds.y), 0 + offset)
-    # img1 = LabeledImage().load_from_dataset_tuple((ds.x, ds.y), 50000 + offset)
-    # img2 = LabeledImage().load_from_dataset_tuple((ds.x, ds.y), 100000 + offset)
-    #
-    # mixed_img = np.concatenate([img0.image, img1.image, img2.image], axis=1)
-    # LabeledImage(mixed_img, "mixed_" + img0.name) \
-    #     .save_image()
-
-    result = None
-    length = len(pickle_locations)
-    for i in range(length):
-        ds = common.load_pickle(pickle_locations[i])
-        if result is None:
-            result = ds
-        else:
-            result.x = np.concatenate([result.x, ds.x], axis=0)
-            result.y = np.concatenate([result.y, ds.y], axis=0)
-
-    return result

@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import common
 from image import LabeledImage
-import image_dataset as ds
+from image_dataset import ImageDataset
 
 import os
 import time
@@ -221,12 +221,12 @@ def model_fn(features, labels, mode, params, config):
 
 
 def load_cifar10():
-    train_ds = ds.load_dataset_from_pickles([
+    train_ds = ImageDataset.load_dataset_from_pickles([
         "/datasets/cifar10/original_train.pkl",
         "/datasets/cifar10/mirror_train.pkl",
         "/datasets/cifar10/rand_distorted_train.pkl",
     ])
-    test_ds = ds.load_dataset_from_pickles([
+    test_ds = ImageDataset.load_dataset_from_pickles([
         "/datasets/cifar10/original_test.pkl",
     ])
 
