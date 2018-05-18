@@ -5,7 +5,6 @@ import tensorflow as tf
 import common
 import image
 
-
 RANDOM_SEED = 55355
 
 class ImageDataset(object):
