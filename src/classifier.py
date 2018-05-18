@@ -7,6 +7,7 @@ import time
 import pprint
 import tensorflow as tf
 
+import hooks
 import common
 
 
@@ -163,6 +164,12 @@ class Classifier(object):
         #     output_dir=flags.model_dir + '/train'
         # )
 
+        summary_saver_hook = tf.train.SummarySaverHook(
+            save_steps=50,
+            output_dir=flags.model_dir + "/train",
+            summary_op=tf.summary.merge_all()
+        )
+
         train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_x},
             y=train_y,
@@ -176,7 +183,7 @@ class Classifier(object):
             self._estimator.train(
                 input_fn=train_input_fn,
                 steps=steps,
-                # hooks=[profiler_hook]
+                hooks=[summary_saver_hook]
             )
             duration = round(time.time() - start_time, 3)
             self.total_train_duration += duration
@@ -185,36 +192,42 @@ class Classifier(object):
             print("Training epoch {} of {} completed".format(i+1, epochs))
 
             if eval_after_each_epoch:
-                self.eval(load_eval_ds_fn)
+                self.eval(load_eval_ds_fn, save_eval_map=False)
 
         self._save_results()
 
-    def eval(self, load_eval_ds_fn):
+    def eval(self, load_eval_ds_fn, save_eval_map=True, log_tensors=False):
         flags = tf.app.flags.FLAGS
 
         if not callable(load_eval_ds_fn):
             raise Exception("load_eval_ds_fn argument is not callable")
 
         eval_x, eval_y = self._get_eval_ds(load_eval_ds_fn)
-        # logging_hook = tf.train.LoggingTensorHook(
-        #     tensors={
-        #         # "probabilities": "softmax_tensor",
-        #         "pred": "diff"
-        #     },
-        #     every_n_iter=1
-        # )
+
+        eval_hooks = []
+        if save_eval_map:
+            eval_hooks.append(hooks.EvaluationMapSaverHook(
+                tensor_names=["labels", "predictions", "top_k_values", "top_k_indices"],
+            ))
+        if log_tensors:
+            eval_hooks.append(tf.train.LoggingTensorHook(
+                tensors={
+                    "probabilities": "softmax_tensor",
+                },
+                every_n_iter=1,
+            ))
 
         eval_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": eval_x},
             y=eval_y,
             batch_size=flags.eval_batch_size,
-            shuffle=False
+            shuffle=False,
         )
 
         start_time = time.time()
         result = self._estimator.evaluate(
             input_fn=eval_input_fn,
-            # hooks=[logging_hook]
+            hooks=eval_hooks
         )
         self.eval_results.append(result)
 

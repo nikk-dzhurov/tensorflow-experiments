@@ -6,7 +6,7 @@ import common
 
 
 class EvaluationMapSaverHook(tf.train.SessionRunHook):
-    def __init__(self, file_name="eval_map.pkl", tensor_names=("labels", "predictions", "top_k_values", "top_k_indices")):
+    def __init__(self, tensor_names=None, file_name="eval_map.pkl"):
         if tensor_names is None or len(tensor_names) == 0:
             raise ValueError("tensorNames should has at least 1 element")
         if type(file_name) is not str or file_name == "":
@@ -14,7 +14,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
 
         self._iter_count = None
         self._tensors = None
-        self._should_trigger = None
+        self._should_trigger = False
         self._results = {}
         self._file_name = file_name
         self._tensors_names = tensor_names
@@ -32,7 +32,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
         else:
             return None
 
-    def after_run(self, run_context, run_values): # pylint: disable=unused-argument
+    def after_run(self, run_context, run_values):  # pylint: disable=unused-argument
         if self._should_trigger:
             len(run_values)
             for idx, t_name in enumerate(self._tensors_names):

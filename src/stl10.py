@@ -9,7 +9,6 @@ import numpy as np
 import tensorflow as tf
 
 import common
-import hooks
 from image import LabeledImage
 from image_dataset import ImageDataset
 import image_dataset as ds
@@ -258,9 +257,6 @@ def model_fn(features, labels, mode, params, config):
     if mode == tf.estimator.ModeKeys.TRAIN:
         learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
 
-        summary_saver = tf.train.SummarySaverHook(
-            save_steps=50, output_dir=config.model_dir + "/train", summary_op=tf.summary.merge_all())
-
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate=learning_rate, name="gradient_descent_optimizer")
         # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name="adam_optimizer")
@@ -271,7 +267,6 @@ def model_fn(features, labels, mode, params, config):
             mode=mode,
             loss=loss,
             train_op=train_op,
-            training_hooks=[summary_saver],
         )
 
     # Add evaluation metrics (for EVAL mode)
@@ -279,12 +274,10 @@ def model_fn(features, labels, mode, params, config):
         "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
     }
 
-    eval_saver = hooks.EvaluationMapSaverHook()
-
     return tf.estimator.EstimatorSpec(
-        mode=mode, loss=loss,
+        mode=mode,
+        loss=loss,
         eval_metric_ops=eval_metric_ops,
-        evaluation_hooks=[eval_saver],
     )
 
 
