@@ -5,7 +5,7 @@ nvidia-docker rm tf_gpu
 
 set -e
 
-nvidia-docker build -t tf-1.7 .
+nvidia-docker build -t tf-1.7 docker
 nvidia-docker run -d \
 	-p 8888:8888 \
 	-p 0.0.0.0:6006:6006 \
