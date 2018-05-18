@@ -10,20 +10,20 @@ class LabeledImage(object):
         self.max_value = max_value
         self.name = str(name) + ".jpg"
 
-    def load_from_dataset_tuple(self, dataset, index=0, max_value=1):
-        if dataset is not None:
-            self.image = dataset[0][index]
-            self.name = str(dataset[1][index]) + ".jpg"
-        else:
-            raise RuntimeError("Invalid initialization parameters provided")
+    @staticmethod
+    def load_from_dataset_tuple(dataset, index=0, max_value=1):
+        if dataset is None:
+            raise ValueError("Invalid initialization parameters provided")
 
-        self.max_value = max_value
-
-        return self
+        return LabeledImage(
+            image=dataset[0][index],
+            name=str(dataset[1][index]) + ".jpg",
+            max_value=max_value,
+        )
 
     def save_image(self, location=None, name=None, ):
         if self.image is None:
-            raise RuntimeError("Image data is missing")
+            raise ValueError("Image data is missing")
 
         if name is None:
             name = self.name

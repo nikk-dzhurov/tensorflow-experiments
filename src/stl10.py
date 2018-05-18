@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 
 import common
+import hooks
 from image import LabeledImage
 from image_dataset import ImageDataset
 import image_dataset as ds
@@ -21,9 +22,9 @@ def build_app_flags():
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.4,
                               "Dropout rate for model training")
-    tf.app.flags.DEFINE_integer("eval_batch_size", 16,
+    tf.app.flags.DEFINE_integer("eval_batch_size", 5,  # 256
                                 "Evaluation data batch size")
-    tf.app.flags.DEFINE_integer("train_batch_size", 2,
+    tf.app.flags.DEFINE_integer("train_batch_size", 2,  # 128
                                 "Training data batch size")
     tf.app.flags.DEFINE_float("initial_learning_rate", 0.05,
                               "Initial value for learning rate")
@@ -44,7 +45,7 @@ def get_model_params():
 
 
 def load_train_dataset():
-    dataset = ImageDataset.load_dataset_from_pickles([
+    dataset = ImageDataset.load_from_pickles([
         "/datasets/stl10/original_train.pkl",
         "/datasets/stl10/mirror_train.pkl",
         "/datasets/stl10/rand_distorted_train.pkl",
@@ -57,7 +58,7 @@ def load_train_dataset():
 
 
 def load_predict_dataset():
-    dataset = ImageDataset.load_dataset_from_pickles([
+    dataset = ImageDataset.load_from_pickles([
         "/datasets/stl10/original_test.pkl",
     ])
 
@@ -65,7 +66,7 @@ def load_predict_dataset():
 
 
 def load_eval_dataset():
-    dataset = ImageDataset.load_dataset_from_pickles([
+    dataset = ImageDataset.load_from_pickles([
         "/datasets/stl10/original_test.pkl",
     ])
 
@@ -120,6 +121,9 @@ def model_fn(features, labels, mode, params, config):
     app_flags = tf.app.flags.FLAGS
 
     print("Model directory: " + config.model_dir)
+
+    # Add name to labels tensor
+    labels = tf.identity(labels, name="labels")
 
     # Input Layer
     with tf.name_scope("input_layer"):
@@ -227,7 +231,12 @@ def model_fn(features, labels, mode, params, config):
     # Logits Layer
     logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
 
-    argmax = tf.argmax(input=logits, axis=1, name="predictions")
+    argmax = tf.argmax(input=logits, axis=1, name="predictions", output_type=tf.int32)
+
+    top_k_values, top_k_indices = tf.nn.top_k(input=logits, k=2)
+    tf.identity(top_k_values, "top_k_values")
+    tf.identity(top_k_indices, "top_k_indices")
+
     softmax = tf.nn.softmax(logits, name="softmax_tensor")
 
     predictions = {
@@ -259,14 +268,24 @@ def model_fn(features, labels, mode, params, config):
             loss=loss, global_step=tf.train.get_global_step(), name="minimize_loss")
 
         return tf.estimator.EstimatorSpec(
-            mode=mode, loss=loss, train_op=train_op, training_hooks=[summary_saver])
+            mode=mode,
+            loss=loss,
+            train_op=train_op,
+            training_hooks=[summary_saver],
+        )
 
     # Add evaluation metrics (for EVAL mode)
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
     }
 
-    return tf.estimator.EstimatorSpec(mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
+    eval_saver = hooks.EvaluationMapSaverHook()
+
+    return tf.estimator.EstimatorSpec(
+        mode=mode, loss=loss,
+        eval_metric_ops=eval_metric_ops,
+        evaluation_hooks=[eval_saver],
+    )
 
 
 if __name__ == "__main__":

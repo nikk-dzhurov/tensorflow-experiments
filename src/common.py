@@ -1,5 +1,6 @@
 import os
 import sys
+import six
 import json
 import copy
 import pickle
@@ -277,48 +278,4 @@ def maybe_download_and_extract(dest_dir, data_url, nested_dir):
         print('File %s is already extracted successfully at %s' % (filename, extracted_dir))
 
 
-class SaveInvalidPredictionsHook(tf.train.SessionRunHook):
-  def __init__(self):
-    self._timer = tf.train.SecondOrStepTimer(every_secs=0, every_steps=1)
 
-  def begin(self):
-    self._timer.reset()
-    self._iter_count = 0
-    # Convert names to tensors if given
-    self._current_tensors = {tag: _as_graph_element(tensor)
-                             for (tag, tensor) in self._tensors.items()}
-
-  def before_run(self, run_context):  # pylint: disable=unused-argument
-    self._should_trigger = self._timer.should_trigger_for_step(self._iter_count)
-    if self._should_trigger:
-      return SessionRunArgs(self._current_tensors)
-    else:
-      return None
-
-  def _log_tensors(self, tensor_values):
-    original = np.get_printoptions()
-    np.set_printoptions(suppress=True)
-    elapsed_secs, _ = self._timer.update_last_triggered_step(self._iter_count)
-    if self._formatter:
-      logging.info(self._formatter(tensor_values))
-    else:
-      stats = []
-      for tag in self._tag_order:
-        stats.append("%s = %s" % (tag, tensor_values[tag]))
-      if elapsed_secs is not None:
-        logging.info("%s (%.3f sec)", ", ".join(stats), elapsed_secs)
-      else:
-        logging.info("%s", ", ".join(stats))
-    np.set_printoptions(**original)
-
-  def after_run(self, run_context, run_values):
-    _ = run_context
-    if self._should_trigger:
-      self._log_tensors(run_values.results)
-
-    self._iter_count += 1
-
-  def end(self, session):
-    if self._log_at_end:
-      values = session.run(self._current_tensors)
-      self._log_tensors(values)

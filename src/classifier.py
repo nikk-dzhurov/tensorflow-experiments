@@ -86,6 +86,7 @@ class Classifier(object):
     def _get_eval_ds(self, load_fn):
         if self._eval_ds is None:
             self._eval_ds = load_fn()
+            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
             print("Eval dataset loaded successfully!")
             self.print_ds_details(self._eval_ds, "eval")
 

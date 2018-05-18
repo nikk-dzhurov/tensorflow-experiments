@@ -2,10 +2,11 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import common
 import image
+import common
 
 RANDOM_SEED = 55355
+
 
 class ImageDataset(object):
     def __init__(self, data, labels):
@@ -78,7 +79,11 @@ class ImageDataset(object):
 
                 partial_data = sess.run(tf.map_fn(
                     fn=lambda img: image.randomly_distort_image(
-                        img, crop_shape=crop_shape, target_size=target_size, seed=seed),
+                        image=img,
+                        crop_shape=crop_shape,
+                        target_size=target_size,
+                        seed=seed
+                    ),
                     elems=batch,
                     parallel_iterations=self.parallel_iterations
                 ))
@@ -145,5 +150,3 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
             os.path.join(save_location, "rand_distorted_train.pkl"))
 
     print("Improving dataset is completed")
-
-

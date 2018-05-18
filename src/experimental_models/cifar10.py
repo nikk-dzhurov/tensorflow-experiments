@@ -221,19 +221,19 @@ def model_fn(features, labels, mode, params, config):
 
 
 def load_cifar10():
-    train_ds = ImageDataset.load_dataset_from_pickles([
+    train_ds = ImageDataset.load_from_pickles([
         "/datasets/cifar10/original_train.pkl",
         "/datasets/cifar10/mirror_train.pkl",
         "/datasets/cifar10/rand_distorted_train.pkl",
     ])
-    test_ds = ImageDataset.load_dataset_from_pickles([
+    test_ds = ImageDataset.load_from_pickles([
         "/datasets/cifar10/original_test.pkl",
     ])
 
     offset = 1024
-    img0 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 0 + offset)
-    img1 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 50000 + offset)
-    img2 = LabeledImage().load_from_dataset_tuple((train_ds.x, train_ds.y), 100000 + offset)
+    img0 = LabeledImage.load_from_dataset_tuple((train_ds.x, train_ds.y), 0 + offset)
+    img1 = LabeledImage.load_from_dataset_tuple((train_ds.x, train_ds.y), 50000 + offset)
+    img2 = LabeledImage.load_from_dataset_tuple((train_ds.x, train_ds.y), 100000 + offset)
 
     mixed_img = np.concatenate([img0.image, img1.image, img2.image], axis=1)
     LabeledImage(mixed_img, "mixed_" + img0.name) \
