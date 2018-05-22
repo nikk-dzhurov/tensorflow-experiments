@@ -44,8 +44,8 @@ class LabeledImage(object):
             self.max_value = 255
 
 
-def randomly_distort_image(img, crop_shape=(26, 26, 3), target_size=32, seed=None):
-    dist = tf.random_crop(img, crop_shape, seed=seed)
+def randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
+    dist = tf.random_crop(image, crop_shape, seed=seed)
     dist = tf.image.random_contrast(dist, lower=0.7, upper=1.3, seed=seed)
     dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)
     dist = tf.image.random_flip_left_right(dist, seed=seed)

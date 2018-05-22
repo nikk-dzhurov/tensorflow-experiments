@@ -3,13 +3,13 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import sys
 import time
 import pprint
 import numpy as np
 import tensorflow as tf
 
 import common
-import hooks
 from image import LabeledImage
 from image_dataset import ImageDataset
 import image_dataset as ds
@@ -54,15 +54,7 @@ def load_train_dataset():
         # "/datasets/stl10/rand_distorted_train_2.pkl",
     ])
 
-    return dataset.x, np.add(dataset.y, -1)
-
-
-def load_predict_dataset():
-    dataset = ImageDataset.load_from_pickles([
-        "/datasets/stl10/original_test.pkl",
-    ])
-
-    return dataset.x, np.add(dataset.y, -1)
+    return dataset.x, dataset.y
 
 
 def load_eval_dataset():
@@ -70,22 +62,22 @@ def load_eval_dataset():
         "/datasets/stl10/original_test.pkl",
     ])
 
-    return dataset.x, np.add(dataset.y, -1)
+    return dataset.x, dataset.y
 
 
-def load_original():
+def load_original(images_dtype=np.float16, labels_dtype=np.uint8):
     common.maybe_download_and_extract(
-        dest_dir="./data",
+        dest_dir="../data",
         data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
         nested_dir="stl10_binary"
     )
 
     # data paths
-    train_x_path = './data/stl10_binary/train_X.bin'
-    train_y_path = './data/stl10_binary/train_y.bin'
+    train_x_path = '../data/stl10_binary/train_X.bin'
+    train_y_path = '../data/stl10_binary/train_y.bin'
 
-    test_x_path = './data/stl10_binary/test_X.bin'
-    test_y_path = './data/stl10_binary/test_y.bin'
+    test_x_path = '../data/stl10_binary/test_X.bin'
+    test_y_path = '../data/stl10_binary/test_y.bin'
 
     def read_labels(path_to_labels):
         with open(path_to_labels, 'rb') as f:
@@ -106,13 +98,13 @@ def load_original():
     test_y = read_labels(test_y_path)
 
     # prepare images/labels for training
-    train_x = common.prepare_images(train_x)
-    train_y = np.asarray(train_y, dtype=np.int32)
+    train_x = common.prepare_images(train_x, dtype=images_dtype)
+    train_y = np.asarray(train_y, dtype=labels_dtype)
 
-    test_x = common.prepare_images(test_x)
-    test_y = np.asarray(test_y, dtype=np.int32)
+    test_x = common.prepare_images(test_x, dtype=images_dtype)
+    test_y = np.asarray(test_y, dtype=labels_dtype)
 
-    return (train_x, train_y), (test_x, test_y)
+    return (train_x, np.add(train_y, -1)), (test_x, np.add(test_y, -1))
 
 
 def model_fn(features, labels, mode, params, config):
@@ -258,9 +250,6 @@ def model_fn(features, labels, mode, params, config):
     if mode == tf.estimator.ModeKeys.TRAIN:
         learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
 
-        summary_saver = tf.train.SummarySaverHook(
-            save_steps=50, output_dir=config.model_dir + "/train", summary_op=tf.summary.merge_all())
-
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate=learning_rate, name="gradient_descent_optimizer")
         # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name="adam_optimizer")
@@ -271,7 +260,6 @@ def model_fn(features, labels, mode, params, config):
             mode=mode,
             loss=loss,
             train_op=train_op,
-            training_hooks=[summary_saver],
         )
 
     # Add evaluation metrics (for EVAL mode)
@@ -279,17 +267,49 @@ def model_fn(features, labels, mode, params, config):
         "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
     }
 
-    eval_saver = hooks.EvaluationMapSaverHook()
-
     return tf.estimator.EstimatorSpec(
-        mode=mode, loss=loss,
+        mode=mode,
+        loss=loss,
         eval_metric_ops=eval_metric_ops,
-        evaluation_hooks=[eval_saver],
     )
+
+
+def split_dataset(ds, classes_count=10, test_items_per_class=300):
+    count_per_class = np.zeros(classes_count, int)
+    new_ds_x = []
+    new_ds_y = []
+    indexes = []
+
+    ds_x, ds_y = ds
+
+    for idx, label in enumerate(ds_y):
+        if count_per_class[label] < test_items_per_class:
+            new_ds_x.append(ds_x[idx])
+            new_ds_y.append(label)
+            count_per_class[label] += 1
+            indexes.append(idx)
+
+    ds_x = np.delete(ds_x, indexes, axis=0)
+    ds_y = np.delete(ds_y, indexes, axis=0)
+    test_ds = (np.asarray(new_ds_x), np.asarray(new_ds_y))
+    train_ds = (ds_x, ds_y)
+
+    return train_ds, test_ds
 
 
 if __name__ == "__main__":
     train, test = load_original()
+
+    extra_train, test = split_dataset(test)
+
+    train_x = np.concatenate([train[0], extra_train[0]], axis=0)
+    train_y = np.concatenate([train[1], extra_train[1]], axis=0)
+    train = (train_x, train_y)
+
+    print(test[0].shape, test[0].dtype, test[1].shape, test[1].dtype)
+    print(train[0].shape, train[0].dtype, train[1].shape, train[1].dtype)
+
+    print(sys.getsizeof(train[0]) // (1024*1024), sys.getsizeof(train[1]) // (1024*1024))
 
     ds.improve_dataset(
         train,
@@ -297,7 +317,7 @@ if __name__ == "__main__":
         "stl10",
         crop_shape=(72, 72, 3),
         target_size=96,
-        rand_dist_sets=1,
+        rand_dist_sets=3,
         save_location="../datasets"
     )
 
