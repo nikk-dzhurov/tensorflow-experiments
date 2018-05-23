@@ -5,7 +5,7 @@ import tensorflow as tf
 
 
 class LabeledImage(object):
-    def __init__(self, image=None, name="image", max_value=1):
+    def __init__(self, image, name="image", max_value=1):
         self.image = image
         self.max_value = max_value
         self.name = str(name) + ".jpg"
@@ -21,7 +21,7 @@ class LabeledImage(object):
             max_value=max_value,
         )
 
-    def save_image(self, location=None, name=None, ):
+    def save(self, location=None, name=None, ):
         if self.image is None:
             raise ValueError("Image data is missing")
 

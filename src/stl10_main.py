@@ -27,29 +27,27 @@ def main(argv):
 
     if args.mode == common.TRAIN_EVAL_MODE:
         classifier.train(
-            epochs=1,
-            steps=100,
+            epochs=10,
+            steps=2000,
             clean_old_model_data=args.clean,
             eval_after_each_epoch=True,
             load_eval_ds_fn=ds_module.load_eval_dataset,
             load_train_ds_fn=ds_module.load_train_dataset,
         )
-    elif args.mode == tf.estimator.ModeKeys.TRAIN:
+    elif args.mode == common.TRAIN_MODE:
         classifier.train(
             epochs=1,
-            steps=100,
+            steps=1000,
             clean_old_model_data=args.clean,
             eval_after_each_epoch=False,
             load_train_ds_fn=ds_module.load_train_dataset,
         )
-    elif args.mode == tf.estimator.ModeKeys.EVAL:
+    elif args.mode == common.EVAL_MODE:
         classifier.eval(
             load_eval_ds_fn=ds_module.load_eval_dataset,
         )
-    elif args.mode == tf.estimator.ModeKeys.PREDICT:
-        classifier.predict(
-            load_predict_ds_fn=ds_module.load_predict_dataset,
-        )
+    elif args.mode == common.PREDICT_MODE:
+        classifier.predict()
     else:
         print("Model mode \"{}\" is not supported".format(args.mode))
         sys.exit(1)

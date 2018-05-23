@@ -5,10 +5,14 @@ from __future__ import print_function
 import os
 import time
 import pprint
+import numpy as np
+from PIL import Image
 import tensorflow as tf
 
 import hooks
 import common
+import files
+from image import LabeledImage
 
 
 class Classifier(object):
@@ -48,6 +52,10 @@ class Classifier(object):
             "learning_rate_decay_steps": {"type": int, "range": [10, 10000]},
             "ignore_gpu": {"type": bool},
             "per_process_gpu_memory_fraction": {"type": float, "range": [0.1, 1.0]},
+            "image_width": {"type": int, "range": [28, 128]},
+            "image_height": {"type": int, "range": [28, 128]},
+            "image_channels": {"type": int, "range": [1, 4]},
+
         }
 
         for flag_name, validations in required_flags.items():
@@ -108,6 +116,17 @@ class Classifier(object):
 
         return self._predict_ds
 
+    def get_final_eval_result(self):
+        if self.eval_results is not None and len(self.eval_results) > 0:
+            res = self.eval_results[-1].copy()
+            res["accuracy"] = res["accuracy"].item()
+            res["loss"] = res["loss"].item()
+            res["global_step"] = res["global_step"].item()
+        else:
+            res = {"error": "eval_results are missing"}
+
+        return res
+
     def _save_results(self):
         pp = pprint.PrettyPrinter(indent=2, compact=True)
 
@@ -124,20 +143,21 @@ class Classifier(object):
 
         model_stats_map = {
             "model_details": self.model_details,
-            "final_result": common.get_final_eval_result(self.eval_results),
+            "final_result": self.get_final_eval_result(),
             "total_train_duration": common.duration_to_string(self.total_train_duration),
             "total_eval_duration": common.duration_to_string(self.total_eval_duration),
         }
 
-        common.save_pickle(
+        files.save_pickle(
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.pkl")
         )
-        common.save_json(
+        files.save_json(
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.json")
         )
 
+        pp.pprint(self.eval_results)
         pp.pprint(model_stats_map)
         print("Total training duration: " + common.duration_to_string(self.total_train_duration))
         print("Total evaluation duration: " + common.duration_to_string(self.total_eval_duration))
@@ -155,7 +175,7 @@ class Classifier(object):
             raise Exception("load_eval_ds_fn argument is not callable")
 
         if clean_old_model_data:
-            common.clean_dir(flags.model_dir)
+            files.clean_dir(flags.model_dir)
 
         train_x, train_y = self._get_train_ds(load_train_ds_fn)
 
@@ -163,12 +183,6 @@ class Classifier(object):
         #     save_steps=50,
         #     output_dir=flags.model_dir + '/train'
         # )
-
-        summary_saver_hook = tf.train.SummarySaverHook(
-            save_steps=50,
-            output_dir=flags.model_dir + "/train",
-            summary_op=tf.summary.merge_all()
-        )
 
         train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_x},
@@ -183,7 +197,7 @@ class Classifier(object):
             self._estimator.train(
                 input_fn=train_input_fn,
                 steps=steps,
-                hooks=[summary_saver_hook]
+                hooks=[]
             )
             duration = round(time.time() - start_time, 3)
             self.total_train_duration += duration
@@ -237,6 +251,35 @@ class Classifier(object):
         print("Eval duration: " + common.duration_to_string(duration))
         print("Eval result:", result)
 
-    def predict(self, image_location=""):
-        print("Not implemented!")
-        pass
+    def predict(self, image_location="/test_images/plane2.jpg"):
+        app_flags = tf.app.flags.FLAGS
+        if type(image_location) is not str or image_location == "":
+            raise ValueError("Specify valid image location")
+
+        img = Image.open(image_location).convert('RGB')
+        if img.width != app_flags.image_width or img.height != app_flags.image_height:
+            raise ValueError("Please provide image with dimensions: {}x{}"
+                             .format(app_flags.image_width, app_flags.image_height))
+
+        images = common.prepare_images([np.array(img)])
+
+
+        input_fn = tf.estimator.inputs.numpy_input_fn(
+            x={"x": images},
+            y=None,
+            batch_size=1,
+            shuffle=False
+        )
+
+        pred_generator = self._estimator.predict(
+            input_fn=input_fn,
+            # predict_keys=["classes", "probabilities", "logits"]
+        )
+
+        for res in pred_generator:
+            print(res)
+            # print(tf.Session().run(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=res["logits"])))
+
+        # LabeledImage(img, "bird", max_value=255).save()
+        # print(img.shape)
+        # pass

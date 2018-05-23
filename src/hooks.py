@@ -45,7 +45,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
         self._iter_count += 1
 
     def end(self, session):
-        common.save_pickle(
+        files.save_pickle(
             self._results,
             os.path.join(tf.app.flags.FLAGS.model_dir, self._file_name)
         )

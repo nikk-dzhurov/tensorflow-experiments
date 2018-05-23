@@ -6,38 +6,46 @@ import os
 import sys
 import time
 import pprint
+from random import shuffle
 import numpy as np
 import tensorflow as tf
 
 import common
+import files
+import image_dataset as img_ds
 from image import LabeledImage
 from image_dataset import ImageDataset
-import image_dataset as ds
 
 
 def build_app_flags():
     # Hyperparameters for the model training/evaluation
     # They are accessible everywhere in the application via tf.app.flags.FLAGS
+
+    # General flags
     tf.app.flags.DEFINE_string("model_dir", "../models/stl10/test16",
                                "Model checkpoint/training/evaluation data directory")
-    tf.app.flags.DEFINE_float("dropout_rate", 0.4,
-                              "Dropout rate for model training")
-    tf.app.flags.DEFINE_integer("eval_batch_size", 5,  # 256
-                                "Evaluation data batch size")
-    tf.app.flags.DEFINE_integer("train_batch_size", 2,  # 128
-                                "Training data batch size")
-    tf.app.flags.DEFINE_float("initial_learning_rate", 0.05,
+    tf.app.flags.DEFINE_float("dropout_rate", 0.6, "Dropout rate for model training")
+    tf.app.flags.DEFINE_integer("eval_batch_size", 256, "Evaluation data batch size")
+    tf.app.flags.DEFINE_integer("train_batch_size", 128, "Training data batch size")
+
+    # Learning rate flags
+    tf.app.flags.DEFINE_float("initial_learning_rate", 0.015,
                               "Initial value for learning rate")
     tf.app.flags.DEFINE_bool("use_static_learning_rate", False,
                              "Flag that determines if learning rate should be constant value")
-    tf.app.flags.DEFINE_float("learning_rate_decay_rate", 0.96,
-                              "Learning rate decay rate")
-    tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 5000,
-                                "Learning rate decay steps")
+    tf.app.flags.DEFINE_float("learning_rate_decay_rate", 0.96, "Learning rate decay rate")
+    tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 5000, "Learning rate decay steps")
+
+    # GPU flags
     tf.app.flags.DEFINE_bool("ignore_gpu", False,
                              "Flag that determines if gpu should be disabled")
     tf.app.flags.DEFINE_float("per_process_gpu_memory_fraction", 1.0,
                               "Fraction of gpu memory to be used")
+
+    # Image flags
+    tf.app.flags.DEFINE_integer("image_width", 96, "Image width")
+    tf.app.flags.DEFINE_integer("image_height", 96, "Image height")
+    tf.app.flags.DEFINE_integer("image_channels", 3, "Image channels")
 
 
 def get_model_params():
@@ -48,10 +56,10 @@ def load_train_dataset():
     dataset = ImageDataset.load_from_pickles([
         "/datasets/stl10/original_train.pkl",
         "/datasets/stl10/mirror_train.pkl",
-        "/datasets/stl10/rand_distorted_train.pkl",
-        # "/datasets/stl10/rand_distorted_train_0.pkl",
-        # "/datasets/stl10/rand_distorted_train_1.pkl",
-        # "/datasets/stl10/rand_distorted_train_2.pkl",
+        # "/datasets/stl10/rand_distorted_train.pkl",
+        "/datasets/stl10/rand_distorted_train_0.pkl",
+        "/datasets/stl10/rand_distorted_train_1.pkl",
+        "/datasets/stl10/rand_distorted_train_2.pkl",
     ])
 
     return dataset.x, dataset.y
@@ -65,8 +73,8 @@ def load_eval_dataset():
     return dataset.x, dataset.y
 
 
-def load_original(images_dtype=np.float16, labels_dtype=np.uint8):
-    common.maybe_download_and_extract(
+def load_original(images_dtype=np.float32, labels_dtype=np.int32):
+    files.maybe_download_and_extract(
         dest_dir="../data",
         data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
         nested_dir="stl10_binary"
@@ -113,9 +121,6 @@ def model_fn(features, labels, mode, params, config):
     app_flags = tf.app.flags.FLAGS
 
     print("Model directory: " + config.model_dir)
-
-    # Add name to labels tensor
-    labels = tf.identity(labels, name="labels")
 
     # Input Layer
     with tf.name_scope("input_layer"):
@@ -236,11 +241,15 @@ def model_fn(features, labels, mode, params, config):
         "classes": argmax,
         # Add `softmax_tensor` to the graph. It is used for PREDICT and by the
         # `logging_hook`.
+        "logits": logits,
         "probabilities": softmax
     }
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+
+    # Add name to labels tensor
+    labels = tf.identity(labels, name="labels")
 
     # Calculate Loss (for both TRAIN and EVAL modes)
     loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="calc_loss")
@@ -249,6 +258,12 @@ def model_fn(features, labels, mode, params, config):
     # Configure the Training Op (for TRAIN mode)
     if mode == tf.estimator.ModeKeys.TRAIN:
         learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
+
+        summary_saver_hook = tf.train.SummarySaverHook(
+            save_steps=50,
+            output_dir=config.model_dir + "/train",
+            summary_op=tf.summary.merge_all()
+        )
 
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate=learning_rate, name="gradient_descent_optimizer")
@@ -260,6 +275,7 @@ def model_fn(features, labels, mode, params, config):
             mode=mode,
             loss=loss,
             train_op=train_op,
+            training_hooks=[summary_saver_hook]
         )
 
     # Add evaluation metrics (for EVAL mode)
@@ -274,44 +290,18 @@ def model_fn(features, labels, mode, params, config):
     )
 
 
-def split_dataset(ds, classes_count=10, test_items_per_class=300):
-    count_per_class = np.zeros(classes_count, int)
-    new_ds_x = []
-    new_ds_y = []
-    indexes = []
-
-    ds_x, ds_y = ds
-
-    for idx, label in enumerate(ds_y):
-        if count_per_class[label] < test_items_per_class:
-            new_ds_x.append(ds_x[idx])
-            new_ds_y.append(label)
-            count_per_class[label] += 1
-            indexes.append(idx)
-
-    ds_x = np.delete(ds_x, indexes, axis=0)
-    ds_y = np.delete(ds_y, indexes, axis=0)
-    test_ds = (np.asarray(new_ds_x), np.asarray(new_ds_y))
-    train_ds = (ds_x, ds_y)
-
-    return train_ds, test_ds
-
-
 if __name__ == "__main__":
     train, test = load_original()
 
-    extra_train, test = split_dataset(test)
-
-    train_x = np.concatenate([train[0], extra_train[0]], axis=0)
-    train_y = np.concatenate([train[1], extra_train[1]], axis=0)
-    train = (train_x, train_y)
+    train, test = img_ds.split_dataset(
+        images=np.concatenate([train[0], test[0]], axis=0),
+        labels=np.concatenate([train[1], test[1]], axis=0),
+    )
 
     print(test[0].shape, test[0].dtype, test[1].shape, test[1].dtype)
     print(train[0].shape, train[0].dtype, train[1].shape, train[1].dtype)
 
-    print(sys.getsizeof(train[0]) // (1024*1024), sys.getsizeof(train[1]) // (1024*1024))
-
-    ds.improve_dataset(
+    img_ds.improve_dataset(
         train,
         test,
         "stl10",
