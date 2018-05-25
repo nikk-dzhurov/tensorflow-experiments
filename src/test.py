@@ -10,10 +10,24 @@ import tensorflow as tf
 import common
 import image_dataset as ds
 
-RANDOM_SEED = 55355
+print("Just test")
 
-train, test = common.load_original_stl10()
+import numpy
+import tensorflow as tf
+from random import randint
 
+if __name__ == "__main__":
 
-# ds.improve_dataset(train, test, "stl10", crop_shape=(72, 72, 3), target_size=96, rand_dist_sets=3, seed=RANDOM_SEED, save_location="../datasets")
+    dims = 8
+    pos = randint(0, dims - 1)
 
+    logits = tf.random_uniform([dims], maxval=3, dtype=tf.float32)
+    labels = tf.one_hot(pos, dims)
+
+    res1 = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+    res2 = tf.losses.sparse_softmax_cross_entropy(logits=logits, labels=tf.constant(pos))
+
+    with tf.Session() as sess:
+        a, b = sess.run([res1, res2])
+        print(a, b)
+        print(a == b)
