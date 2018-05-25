@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 import common
-
+import files
 
 class EvaluationMapSaverHook(tf.train.SessionRunHook):
     def __init__(self, tensor_names=None, file_name="eval_map.pkl"):

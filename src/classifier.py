@@ -12,19 +12,23 @@ import tensorflow as tf
 import hooks
 import common
 import files
+import image
 from image import LabeledImage
 
 
 class Classifier(object):
-    def __init__(self, model_fn, model_params):
+    def __init__(self, model_fn, model_params, class_names):
 
         self.validate_required_app_flags()
+
+        self.class_names = class_names
 
         self._eval_ds = None
         self._train_ds = None
         self._predict_ds = None
         self.model_details = {
-            "model_dir": tf.app.flags.FLAGS.model_dir,
+            "model_flags": tf.app.flags.FLAGS.flag_values_dict(),
+            "model_params": model_params,
             "model_vars": {}
         }
         self.eval_results = []
@@ -37,6 +41,12 @@ class Classifier(object):
             params=model_params,
             config=self.get_run_config_from_flags(),
         )
+
+        self._eval_columns = [
+            ('global_step', 'Global Step'),
+            ('accuracy', 'Accuracy'),
+            ('loss', 'Loss'),
+        ]
 
     @staticmethod
     def validate_required_app_flags():
@@ -55,7 +65,6 @@ class Classifier(object):
             "image_width": {"type": int, "range": [28, 128]},
             "image_height": {"type": int, "range": [28, 128]},
             "image_channels": {"type": int, "range": [1, 4]},
-
         }
 
         for flag_name, validations in required_flags.items():
@@ -92,82 +101,63 @@ class Classifier(object):
 
         return tf.estimator.RunConfig(session_config=sess_config)
 
-    def _get_eval_ds(self, load_fn):
-        if self._eval_ds is None:
-            self._eval_ds = load_fn()
-            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
-            print("Eval dataset loaded successfully!")
-            self.print_ds_details(self._eval_ds, "eval")
+    @staticmethod
+    def print_results_as_table(columns, data):
+        total_len = 0
+        col_lens = {}
+        columns_map = {}
 
-        return self._eval_ds
+        for field in columns:
+            field_key = field[0]
+            field_name = field[1]
+            columns_map[field_key] = field_name
+            v_len = max(len(field_name) + 1, 10)
+            col_lens[field_key] = v_len
+            total_len += v_len
 
-    def _get_train_ds(self, get_fn):
-        if self._train_ds is None:
-            self._train_ds = get_fn()
-            print("Train dataset loaded successfully!")
-            self.print_ds_details(self._train_ds, "train")
+        def row_string(data):
+            res = ""
+            for field in columns:
+                field_key = field[0]
+                res += "|"
+                res += col_string(data[field_key], " ", col_lens[field_key])
+            return res + "|"
 
-        return self._train_ds
+        def col_string(data, pad_symbol, pad_num):
+            if type(data) is float or type(data) is np.float32:
+                return "{:{}<{}.6f}".format(data, pad_symbol, pad_num)
+            return "{:{}<{}}".format(data, pad_symbol, pad_num)
 
-    def _get_predict_ds(self, load_fn):
-        self._predict_ds = load_fn()
-        print("Predict dataset loaded successfully!")
-        self.print_ds_details(self._predict_ds, "predict")
+        def separator_string():
+            res = ""
+            for field in columns:
+                field_key = field[0]
+                res += "+"
+                res += col_string("", "-", col_lens[field_key])
+            return res + "+"
 
-        return self._predict_ds
+        top_bottom_line = "+{:-<{}}+".format('', total_len + len(columns) - 1)
 
-    def get_final_eval_result(self):
-        if self.eval_results is not None and len(self.eval_results) > 0:
-            res = self.eval_results[-1].copy()
-            res["accuracy"] = res["accuracy"].item()
-            res["loss"] = res["loss"].item()
-            res["global_step"] = res["global_step"].item()
-        else:
-            res = {"error": "eval_results are missing"}
+        print(top_bottom_line)
+        print(row_string(columns_map))
+        for res in data:
+            print(separator_string())
+            print(row_string(res))
+        print(top_bottom_line)
 
-        return res
+    def train(self,
+              steps,
+              load_train_ds_fn,
+              epochs=1,
+              clean_old_model_data=False,
+              load_eval_ds_fn=None,
+              eval_after_each_epoch=False):
 
-    def _save_results(self):
-        pp = pprint.PrettyPrinter(indent=2, compact=True)
-
-        for name in self._estimator.get_variable_names():
-            val = self._estimator.get_variable_value(name)
-            if len(val.shape) > 0:
-                self.model_details["model_vars"][name] = {
-                    "shape": val.shape,
-                }
-            else:
-                self.model_details["model_vars"][name] = {
-                    "value": val.item(),
-                }
-
-        model_stats_map = {
-            "model_details": self.model_details,
-            "final_result": self.get_final_eval_result(),
-            "total_train_duration": common.duration_to_string(self.total_train_duration),
-            "total_eval_duration": common.duration_to_string(self.total_eval_duration),
-        }
-
-        files.save_pickle(
-            model_stats_map,
-            os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.pkl")
-        )
-        files.save_json(
-            model_stats_map,
-            os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.json")
-        )
-
-        pp.pprint(self.eval_results)
-        pp.pprint(model_stats_map)
-        print("Total training duration: " + common.duration_to_string(self.total_train_duration))
-        print("Total evaluation duration: " + common.duration_to_string(self.total_eval_duration))
-
-    def train(self, steps, load_train_ds_fn, clean_old_model_data=False, load_eval_ds_fn=None, epochs=1, eval_after_each_epoch=False):
         flags = tf.app.flags.FLAGS
 
-        if type(steps) is not int or steps < 1 or steps > 10000:
+        if type(steps) is not int or 1 < steps > 10000:
             raise Exception("Invalid steps argument")
-        if type(epochs) is not int or epochs < 1 or epochs > 100:
+        if type(epochs) is not int or 1 < steps > 100:
             raise Exception("Invalid epochs argument")
         if not callable(load_train_ds_fn):
             raise Exception("load_train_ds_fn argument is not callable")
@@ -179,11 +169,6 @@ class Classifier(object):
 
         train_x, train_y = self._get_train_ds(load_train_ds_fn)
 
-        # profiler_hook = tf.train.ProfilerHook(
-        #     save_steps=50,
-        #     output_dir=flags.model_dir + '/train'
-        # )
-
         train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_x},
             y=train_y,
@@ -191,6 +176,8 @@ class Classifier(object):
             num_epochs=None,
             shuffle=True
         )
+
+        print("Train {}x{} steps".format(epochs, steps))
 
         for i in range(epochs):
             start_time = time.time()
@@ -249,7 +236,7 @@ class Classifier(object):
         self.total_eval_duration += duration
 
         print("Eval duration: " + common.duration_to_string(duration))
-        print("Eval result:", result)
+        self.print_results_as_table(self._eval_columns, [result])
 
     def predict(self, image_location="/test_images/plane2.jpg"):
         app_flags = tf.app.flags.FLAGS
@@ -262,7 +249,7 @@ class Classifier(object):
                              .format(app_flags.image_width, app_flags.image_height))
 
         images = common.prepare_images([np.array(img)])
-
+        actual_class_name = "airplane"
 
         input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": images},
@@ -271,15 +258,96 @@ class Classifier(object):
             shuffle=False
         )
 
-        pred_generator = self._estimator.predict(
-            input_fn=input_fn,
-            # predict_keys=["classes", "probabilities", "logits"]
-        )
+        pred_generator = self._estimator.predict(input_fn=input_fn)
 
         for res in pred_generator:
             print(res)
+            prediction_class = self._index_to_class_name(res["class"])
+            probability = res["probabilities"][res["class"]]*100
+
+            print("Prediction: %s(%.2f%%), actual class %s" % (prediction_class, probability,  actual_class_name))
             # print(tf.Session().run(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=res["logits"])))
 
         # LabeledImage(img, "bird", max_value=255).save()
         # print(img.shape)
         # pass
+
+    def get_final_eval_result(self):
+        if self.eval_results is not None and len(self.eval_results) > 0:
+            res = self.eval_results[-1].copy()
+            res["accuracy"] = res["accuracy"].item()
+            res["loss"] = res["loss"].item()
+            res["global_step"] = res["global_step"].item()
+        else:
+            res = {"error": "eval_results are missing"}
+
+        return res
+
+    def _get_eval_ds(self, load_fn):
+        if self._eval_ds is None:
+            self._eval_ds = load_fn()
+            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
+            print("Evaluation dataset loaded successfully!")
+            self.print_ds_details(self._eval_ds, "eval")
+
+        return self._eval_ds
+
+    def _get_train_ds(self, get_fn):
+        if self._train_ds is None:
+            self._train_ds = get_fn()
+            print("Training dataset loaded successfully!")
+            self.print_ds_details(self._train_ds, "train")
+
+        return self._train_ds
+
+    def _get_predict_ds(self, load_fn):
+        self._predict_ds = load_fn()
+        print("Prediction dataset loaded successfully!")
+        self.print_ds_details(self._predict_ds, "predict")
+
+        return self._predict_ds
+
+    def _class_name_to_index(self, class_name):
+        return self.class_names.index(class_name)
+
+    def _index_to_class_name(self, idx):
+        return self.class_names[idx]
+
+    def _save_results(self):
+        pp = pprint.PrettyPrinter(indent=2, compact=True)
+
+        for name in self._estimator.get_variable_names():
+            if name.find("optimizer") != -1 or name in ["beta1_power", "beta2_power"]:
+                continue
+
+            val = self._estimator.get_variable_value(name)
+            if len(val.shape) > 0:
+                self.model_details["model_vars"][name] = {
+                    "shape": val.shape,
+                }
+            else:
+                self.model_details["model_vars"][name] = {
+                    "value": val.item(),
+                }
+
+        model_stats_map = {
+            "model_details": self.model_details,
+            "final_result": self.get_final_eval_result(),
+            "total_train_duration": common.duration_to_string(self.total_train_duration),
+            "total_eval_duration": common.duration_to_string(self.total_eval_duration),
+        }
+
+        files.save_pickle(
+            model_stats_map,
+            os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.pkl")
+        )
+        files.save_json(
+            model_stats_map,
+            os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.json")
+        )
+
+        self.print_results_as_table(self._eval_columns, self.eval_results)
+        pp.pprint(model_stats_map)
+        print("Total training duration: " + common.duration_to_string(self.total_train_duration))
+        print("Total evaluation duration: " + common.duration_to_string(self.total_eval_duration))
+

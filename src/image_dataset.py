@@ -154,9 +154,6 @@ def unzip_ds_pairs(ds):
 
 def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3),
                     target_size=32, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
-    # EXAMPLE USAGE FOR CIFAR10
-    # train, test = tf.keras.datasets.cifar10.load_data()
-    # improve_dataset(train, test, "cifar10", seed=RANDOM_SEED, save_location="../datasets")
 
     test_x, test_y = test
     train_x, train_y = train

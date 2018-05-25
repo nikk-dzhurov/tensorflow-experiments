@@ -10,7 +10,6 @@ nvidia-docker run -d \
 	-p 8888:8888 \
 	-p 0.0.0.0:6006:6006 \
 	--name tf_gpu \
-	-e "CURRENT_MODEL_NAME=stl10" \
 	-v "$(pwd)/src":"/app" \
 	-v "$(pwd)/data":"/data" \
 	-v "$(pwd)/models":"/models" \

@@ -36,6 +36,18 @@ def parse_known_args(argv):
         default='',
         help='Absolute path to image file.'
     )
+    parser.add_argument(
+        '--epochs',
+        type=int,
+        default=0,
+        help="Set training epochs"
+    )
+    parser.add_argument(
+        '--steps',
+        type=int,
+        default=0,
+        help="Set training steps per epoch"
+    )
 
     parsed_args, _ = parser.parse_known_args()
 
@@ -200,9 +212,3 @@ def mixed_layer(input_layer, name="mixed_layer"):
                 axis=3, values=[branch_1x1, branch_3x3, branch_5x5, branch_max_pool])
 
     return result_layer
-
-
-
-
-
-

@@ -20,15 +20,23 @@ def main(argv):
 
     ds_module.build_app_flags()
 
+    train_epochs = 2
+    train_steps = 1000
+    if type(args.steps) is int and 1 <= args.steps <= 10000:
+        train_steps = args.steps
+    if type(args.epochs) is int and 1 <= args.epochs <= 100:
+        train_epochs = args.epochs
+
     classifier = Classifier(
         model_fn=ds_module.model_fn,
         model_params=ds_module.get_model_params(),
+        class_names=ds_module.get_class_names()
     )
 
     if args.mode == common.TRAIN_EVAL_MODE:
         classifier.train(
-            epochs=10,
-            steps=2000,
+            epochs=train_epochs,
+            steps=train_steps,
             clean_old_model_data=args.clean,
             eval_after_each_epoch=True,
             load_eval_ds_fn=ds_module.load_eval_dataset,
@@ -36,8 +44,8 @@ def main(argv):
         )
     elif args.mode == common.TRAIN_MODE:
         classifier.train(
-            epochs=1,
-            steps=1000,
+            epochs=train_epochs,
+            steps=train_steps,
             clean_old_model_data=args.clean,
             eval_after_each_epoch=False,
             load_train_ds_fn=ds_module.load_train_dataset,

@@ -12,29 +12,30 @@ import tensorflow as tf
 
 import common
 import files
+import image
 import image_dataset as img_ds
 from image import LabeledImage
 from image_dataset import ImageDataset
 
 
 def build_app_flags():
-    # Hyperparameters for the model training/evaluation
+    # Global app parameters
     # They are accessible everywhere in the application via tf.app.flags.FLAGS
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/test16",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_1_eps0.1_lr_0.0005",
                                "Model checkpoint/training/evaluation data directory")
-    tf.app.flags.DEFINE_float("dropout_rate", 0.6, "Dropout rate for model training")
-    tf.app.flags.DEFINE_integer("eval_batch_size", 256, "Evaluation data batch size")
-    tf.app.flags.DEFINE_integer("train_batch_size", 128, "Training data batch size")
+    tf.app.flags.DEFINE_float("dropout_rate", 0.3, "Dropout rate for model training")
+    tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
+    tf.app.flags.DEFINE_integer("train_batch_size", 64, "Training data batch size")
 
     # Learning rate flags
-    tf.app.flags.DEFINE_float("initial_learning_rate", 0.015,
+    tf.app.flags.DEFINE_float("initial_learning_rate", 0.0005,
                               "Initial value for learning rate")
-    tf.app.flags.DEFINE_bool("use_static_learning_rate", False,
+    tf.app.flags.DEFINE_bool("use_static_learning_rate", True,
                              "Flag that determines if learning rate should be constant value")
     tf.app.flags.DEFINE_float("learning_rate_decay_rate", 0.96, "Learning rate decay rate")
-    tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 5000, "Learning rate decay steps")
+    tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 2000, "Learning rate decay steps")
 
     # GPU flags
     tf.app.flags.DEFINE_bool("ignore_gpu", False,
@@ -115,15 +116,32 @@ def load_original(images_dtype=np.float32, labels_dtype=np.int32):
     return (train_x, np.add(train_y, -1)), (test_x, np.add(test_y, -1))
 
 
+def get_class_names():
+    with open("../data/stl10_binary/class_names.txt") as f:
+        content = f.readlines()
+
+    class_names = [x.strip() for x in content]
+
+    return class_names
+
+
 def model_fn(features, labels, mode, params, config):
-    """Model function for CNN."""
 
     app_flags = tf.app.flags.FLAGS
 
-    print("Model directory: " + config.model_dir)
-
     # Input Layer
     with tf.name_scope("input_layer"):
+        # if mode == tf.estimator.ModeKeys.TRAIN:
+        #     input_layer = tf.map_fn(
+        #         fn=lambda img: image.randomly_distort_image(
+        #             image=img,
+        #             crop_shape=(72, 72, 3),
+        #             target_size=96,
+        #         ),
+        #         elems=features["x"],
+        #         parallel_iterations=128
+        #     )
+        # else:
         input_layer = features["x"]
 
     # Convolution 1
@@ -237,10 +255,7 @@ def model_fn(features, labels, mode, params, config):
     softmax = tf.nn.softmax(logits, name="softmax_tensor")
 
     predictions = {
-        # Generate predictions (for PREDICT and EVAL mode)
-        "classes": argmax,
-        # Add `softmax_tensor` to the graph. It is used for PREDICT and by the
-        # `logging_hook`.
+        "class": argmax,
         "logits": logits,
         "probabilities": softmax
     }
@@ -251,23 +266,29 @@ def model_fn(features, labels, mode, params, config):
     # Add name to labels tensor
     labels = tf.identity(labels, name="labels")
 
-    # Calculate Loss (for both TRAIN and EVAL modes)
+    # Calculate Loss
     loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="calc_loss")
     tf.summary.scalar("cross_entropy", loss)
 
-    # Configure the Training Op (for TRAIN mode)
+    # Configure the TrainingOp
     if mode == tf.estimator.ModeKeys.TRAIN:
-        learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
 
         summary_saver_hook = tf.train.SummarySaverHook(
-            save_steps=50,
+            save_steps=100,
             output_dir=config.model_dir + "/train",
             summary_op=tf.summary.merge_all()
         )
 
-        optimizer = tf.train.GradientDescentOptimizer(
-            learning_rate=learning_rate, name="gradient_descent_optimizer")
-        # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name="adam_optimizer")
+        # Gradient Descent Optimizer configuration with learning rate decay
+        # learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
+        # optimizer = tf.train.GradientDescentOptimizer(
+        #     learning_rate=learning_rate, name="gradient_descent_optimizer")
+
+        optimizer = tf.train.AdamOptimizer(
+            learning_rate=tf.app.flags.FLAGS.initial_learning_rate,
+            epsilon=0.01,
+            name="adam_optimizer"
+        )
         train_op = optimizer.minimize(
             loss=loss, global_step=tf.train.get_global_step(), name="minimize_loss")
 
@@ -278,9 +299,9 @@ def model_fn(features, labels, mode, params, config):
             training_hooks=[summary_saver_hook]
         )
 
-    # Add evaluation metrics (for EVAL mode)
+    # Add evaluation metrics
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["classes"])
+        "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["class"])
     }
 
     return tf.estimator.EstimatorSpec(
@@ -296,6 +317,7 @@ if __name__ == "__main__":
     train, test = img_ds.split_dataset(
         images=np.concatenate([train[0], test[0]], axis=0),
         labels=np.concatenate([train[1], test[1]], axis=0),
+        test_items_fraction=0.25,
     )
 
     print(test[0].shape, test[0].dtype, test[1].shape, test[1].dtype)
@@ -307,7 +329,6 @@ if __name__ == "__main__":
         "stl10",
         crop_shape=(72, 72, 3),
         target_size=96,
-        rand_dist_sets=3,
+        rand_dist_sets=0,
         save_location="../datasets"
     )
-
