@@ -1,6 +1,7 @@
 .idea/
 data/
 models/
+samples/
 datasets/
 src/MNIST-data/
 src/__pycache__/

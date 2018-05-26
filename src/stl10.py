@@ -2,13 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import sys
-import time
-import pprint
-from random import shuffle
 import numpy as np
 import tensorflow as tf
+from random import randint
 
 import common
 import files
@@ -50,17 +47,18 @@ def build_app_flags():
 
 
 def get_model_params():
-    return {"add_layer_summaries": True}
+    return {"add_layer_summaries": False}
 
 
 def load_train_dataset():
     dataset = ImageDataset.load_from_pickles([
-        "/datasets/stl10/original_train.pkl",
-        "/datasets/stl10/mirror_train.pkl",
-        # "/datasets/stl10/rand_distorted_train.pkl",
-        "/datasets/stl10/rand_distorted_train_0.pkl",
-        "/datasets/stl10/rand_distorted_train_1.pkl",
-        "/datasets/stl10/rand_distorted_train_2.pkl",
+        "../datasets/stl10/original_train.pkl",
+        "../datasets/stl10/mirror_train.pkl",
+        # "../datasets/stl10/rot_90_1_train.pkl",
+        # "../datasets/stl10/rot_90_3_train.pkl",
+        "../datasets/stl10/rand_distorted_train_0.pkl",
+        "../datasets/stl10/rand_distorted_train_1.pkl",
+        "../datasets/stl10/rand_distorted_train_2.pkl",
     ])
 
     return dataset.x, dataset.y
@@ -286,7 +284,7 @@ def model_fn(features, labels, mode, params, config):
 
         optimizer = tf.train.AdamOptimizer(
             learning_rate=tf.app.flags.FLAGS.initial_learning_rate,
-            epsilon=0.01,
+            epsilon=0.1,
             name="adam_optimizer"
         )
         train_op = optimizer.minimize(
@@ -311,13 +309,41 @@ def model_fn(features, labels, mode, params, config):
     )
 
 
+def _save_ds_samples():
+    pickles = [
+        "../datasets/stl10/original_train.pkl",
+        "../datasets/stl10/mirror_train.pkl",
+        "../datasets/stl10/rot_90_1_train.pkl",
+        "../datasets/stl10/rot_90_3_train.pkl",
+        "../datasets/stl10/rand_distorted_train_0.pkl",
+        "../datasets/stl10/rand_distorted_train_1.pkl",
+        "../datasets/stl10/rand_distorted_train_2.pkl",
+    ]
+    dataset = ImageDataset.load_from_pickles(pickles)
+
+    for i in range(5):
+        images = []
+        idx = randint(0, 10000 - 1)
+        for j in range(len(pickles)):
+            images.append(
+                LabeledImage.load_from_dataset(dataset, index=j*10000+idx),
+            )
+        LabeledImage(np.concatenate([x.image for x in images], axis=1), images[0].name) \
+            .save(location="../samples/", name="{}_{}".format(idx, images[0].name))
+
+
 if __name__ == "__main__":
+    # Get samples from Dataset
+    # _save_ds_samples()
+    # sys.exit(0)
+
     train, test = load_original()
 
     train, test = img_ds.split_dataset(
         images=np.concatenate([train[0], test[0]], axis=0),
         labels=np.concatenate([train[1], test[1]], axis=0),
-        test_items_fraction=0.25,
+        # test_items_fraction=0.25,
+        test_items_per_class=200,
     )
 
     print(test[0].shape, test[0].dtype, test[1].shape, test[1].dtype)
@@ -329,6 +355,7 @@ if __name__ == "__main__":
         "stl10",
         crop_shape=(72, 72, 3),
         target_size=96,
-        rand_dist_sets=0,
+        rand_dist_sets=3,
+        add_rot90_dist=True,
         save_location="../datasets"
     )

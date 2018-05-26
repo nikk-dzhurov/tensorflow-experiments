@@ -99,7 +99,13 @@ class Classifier(object):
                 per_process_gpu_memory_fraction=flags.per_process_gpu_memory_fraction)
             sess_config = tf.ConfigProto(gpu_options=gpu_options)
 
-        return tf.estimator.RunConfig(session_config=sess_config)
+        return tf.estimator.RunConfig(
+            session_config=sess_config,
+            log_step_count_steps=50,
+            save_summary_steps=50,
+            save_checkpoints_steps=500,
+            keep_checkpoint_max=10,
+        )
 
     @staticmethod
     def print_results_as_table(columns, data):
@@ -157,7 +163,7 @@ class Classifier(object):
 
         if type(steps) is not int or 1 < steps > 10000:
             raise Exception("Invalid steps argument")
-        if type(epochs) is not int or 1 < steps > 100:
+        if type(epochs) is not int or 1 < epochs > 100:
             raise Exception("Invalid epochs argument")
         if not callable(load_train_ds_fn):
             raise Exception("load_train_ds_fn argument is not callable")

@@ -15,5 +15,6 @@ nvidia-docker run -d \
 	-v "$(pwd)/models":"/models" \
 	-v "$(pwd)/datasets":"/datasets" \
 	-v "$(pwd)/test_images":"/test_images" \
+	-v "$(pwd)/samples":"/samples" \
 	-v "/usr/local/cuda/extras/CUPTI/lib64":"/usr/local/cuda/extras/CUPTI/lib64" \
 	local-tf

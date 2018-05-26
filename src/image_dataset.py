@@ -15,8 +15,8 @@ class ImageDataset(object):
         self.x = data
         self.y = labels
 
-        self.dist_batch_size = 2000
-        self.parallel_iterations = 100
+        self.DIST_BATCH_SIZE = 2000
+        self.PARALLEL_ITERATIONS = 100
 
     @staticmethod
     def load_from_pickles(pickle_locations):
@@ -43,52 +43,46 @@ class ImageDataset(object):
         self.y = np.append(self.y, labels)
 
     def mirror_images(self):
-        mirror_x = None
-        data_len = len(self.x)
-        steps = data_len // self.dist_batch_size
-        if data_len % self.dist_batch_size:
-            steps += 1
-
-        for step in range(steps):
-            print("step:", step)
-
-            batch = self._get_current_batch(step)
-            partial_data = tf.Session().run(tf.map_fn(
+        return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
+            tf.map_fn(
                 fn=lambda img: tf.image.flip_left_right(img),
                 elems=batch,
-                parallel_iterations=self.parallel_iterations
-            ))
+                parallel_iterations=parallel_iter
+            )
+        ))
 
-            if mirror_x is None:
-                mirror_x = partial_data
-            else:
-                mirror_x = np.concatenate([mirror_x, partial_data], axis=0)
-
-        print(mirror_x.shape)
-
-        return ImageDataset(mirror_x, self.y.copy())
+    def rot90_images(self, n_times=1):
+        return self._distort_on_batches(lambda batch, _: tf.Session().run(
+            tf.image.rot90(batch, k=n_times)
+        ))
 
     def randomly_distort_images(self, crop_shape, target_size, seed=None):
+        return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
+             tf.map_fn(
+                 fn=lambda img: image.randomly_distort_image(
+                     image=img,
+                     crop_shape=crop_shape,
+                     target_size=target_size,
+                     seed=seed
+                 ),
+                 elems=batch,
+                 parallel_iterations=parallel_iter
+             )
+        ))
+
+    def _distort_on_batches(self, dist_fn):
         random_dist_data = None
         data_len = len(self.x)
-        steps = data_len // self.dist_batch_size
-        if data_len % self.dist_batch_size:
+        steps = data_len // self.DIST_BATCH_SIZE
+        if data_len % self.DIST_BATCH_SIZE:
             steps += 1
 
         for step in range(steps):
-            print("step:", step)
+            print("Step {} of {}".format(step, steps))
 
             batch = self._get_current_batch(step)
-            partial_data = tf.Session().run(tf.map_fn(
-                fn=lambda img: image.randomly_distort_image(
-                    image=img,
-                    crop_shape=crop_shape,
-                    target_size=target_size,
-                    seed=seed
-                ),
-                elems=batch,
-                parallel_iterations=self.parallel_iterations
-            ))
+
+            partial_data = dist_fn(batch, self.PARALLEL_ITERATIONS)
 
             if random_dist_data is None:
                 random_dist_data = partial_data
@@ -100,20 +94,28 @@ class ImageDataset(object):
         return ImageDataset(random_dist_data, self.y.copy())
 
     def _get_current_batch(self, curr_step):
-        start_idx = curr_step * self.dist_batch_size
-        end_idx = start_idx + self.dist_batch_size
+        start_idx = curr_step * self.DIST_BATCH_SIZE
+        end_idx = start_idx + self.DIST_BATCH_SIZE
 
         return self.x[start_idx:end_idx]
 
 
-def split_dataset(images, labels, classes_count=10, test_items_fraction=0.2):
-    count_per_class = np.zeros(classes_count, int)
+def split_dataset(images, labels, classes_count=10,
+                  test_items_per_class=None, test_items_fraction=None):
+
+    if test_items_per_class is None and test_items_fraction is None:
+        raise ValueError("Please specify test_items_per_class or test_items_fraction")
+    if test_items_per_class is not None and test_items_fraction is not None:
+        raise ValueError("Please specify either test_items_per_class or test_items_fraction")
+
     test_ds = []
     indices = []
+    count_per_class = np.zeros(classes_count, int)
 
-    test_items_per_class = int(labels.shape[0]*test_items_fraction/10)
+    if test_items_per_class is None:
+        test_items_per_class = int(labels.shape[0]*test_items_fraction/10)
 
-    zipped_ds = zip_ds_pairs(images, labels)
+    zipped_ds = _zip_ds_pairs(images, labels)
 
     random.shuffle(zipped_ds)
 
@@ -127,33 +129,14 @@ def split_dataset(images, labels, classes_count=10, test_items_fraction=0.2):
     for i in sorted(indices, reverse=True):
         del zipped_ds[i]
 
-    train_ds = unzip_ds_pairs(zipped_ds)
-    test_ds = unzip_ds_pairs(test_ds)
+    train_ds = _unzip_ds_pairs(zipped_ds)
+    test_ds = _unzip_ds_pairs(test_ds)
 
     return train_ds, test_ds
 
 
-def zip_ds_pairs(images, labels):
-    zipped_ds = []
-    for idx, label in enumerate(labels):
-        zipped_ds.append([label, images[idx]])
-
-    return zipped_ds
-
-
-def unzip_ds_pairs(ds):
-    ds_x = []
-    ds_y = []
-
-    for pair in ds:
-        ds_y.append(pair[0])
-        ds_x.append(pair[1])
-
-    return np.asarray(ds_x), np.asarray(ds_y)
-
-
 def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3),
-                    target_size=32, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
+                    target_size=32, add_rot90_dist=False, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
 
     test_x, test_y = test
     train_x, train_y = train
@@ -182,17 +165,41 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
     train_ds.mirror_images().save_to_pickle(
         os.path.join(save_location, "mirror_train.pkl"))
 
+    if add_rot90_dist:
+        # rot90_1 images in the dataset
+        train_ds.rot90_images(1).save_to_pickle(
+            os.path.join(save_location, "rot_90_1_train.pkl"))
+
+        # rot90_3 images in the dataset
+        train_ds.rot90_images(3).save_to_pickle(
+            os.path.join(save_location, "rot_90_3_train.pkl"))
+
     # randomly distort images in the dataset
-    if rand_dist_sets > 1:
+    if rand_dist_sets >= 1:
         for i in range(rand_dist_sets):
             train_ds.randomly_distort_images(
                 seed=seed+i, crop_shape=crop_shape, target_size=target_size)\
                 .save_to_pickle(
                 os.path.join(save_location, "rand_distorted_train_%d.pkl" % i))
-    else:
-        train_ds.randomly_distort_images(
-            seed=seed, crop_shape=crop_shape, target_size=target_size)\
-            .save_to_pickle(
-            os.path.join(save_location, "rand_distorted_train.pkl"))
 
     print("Improving dataset is completed")
+
+
+def _zip_ds_pairs(images, labels):
+    zipped_ds = []
+    for idx, label in enumerate(labels):
+        zipped_ds.append([label, images[idx]])
+
+    return zipped_ds
+
+
+def _unzip_ds_pairs(ds):
+    ds_x = []
+    ds_y = []
+
+    for pair in ds:
+        ds_y.append(pair[0])
+        ds_x.append(pair[1])
+
+    return np.asarray(ds_x), np.asarray(ds_y)
+

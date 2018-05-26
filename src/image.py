@@ -3,17 +3,24 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
+from image_dataset import ImageDataset
 
 class LabeledImage(object):
     def __init__(self, image, name="image", max_value=1):
         self.image = image
         self.max_value = max_value
-        self.name = str(name) + ".jpg"
+        if type(name) is str and name.endswith(".jpg"):
+            self.name = name
+        else:
+            self.name = str(name) + ".jpg"
 
     @staticmethod
-    def load_from_dataset_tuple(dataset, index=0, max_value=1):
+    def load_from_dataset(dataset, index=0, max_value=1):
         if dataset is None:
             raise ValueError("Invalid initialization parameters provided")
+
+        if isinstance(dataset, ImageDataset):
+            dataset = (dataset.x, dataset.y)
 
         return LabeledImage(
             image=dataset[0][index],
