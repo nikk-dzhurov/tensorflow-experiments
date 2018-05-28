@@ -20,7 +20,7 @@ def main(argv):
 
     ds_module.build_app_flags()
 
-    train_epochs = 45
+    train_epochs = 50
     train_steps = 1000
     if type(args.steps) is int and 1 <= args.steps <= 10000:
         train_steps = args.steps

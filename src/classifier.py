@@ -11,7 +11,7 @@ import tensorflow as tf
 
 import hooks
 import common
-import files
+import file
 import image
 from image import LabeledImage
 
@@ -151,6 +151,15 @@ class Classifier(object):
             print(row_string(res))
         print(top_bottom_line)
 
+    def export_model(self):
+        self._estimator.export_savedmodel(
+            export_dir_base=tf.app.flags.FLAGS.model_dir,
+            serving_input_receiver_fn=tf.estimator.export.build_parsing_serving_input_receiver_fn({
+                "x": tf.FixedLenFeature(shape=(96, 96, 3), dtype=tf.float32),
+            }),
+            strip_default_attrs=True,
+        )
+
     def train(self,
               steps,
               load_train_ds_fn,
@@ -171,7 +180,7 @@ class Classifier(object):
             raise Exception("load_eval_ds_fn argument is not callable")
 
         if clean_old_model_data:
-            files.clean_dir(flags.model_dir)
+            file.clean_dir(flags.model_dir)
 
         train_x, train_y = self._get_train_ds(load_train_ds_fn)
 
@@ -244,7 +253,7 @@ class Classifier(object):
         print("Eval duration: " + common.duration_to_string(duration))
         self.print_results_as_table(self._eval_columns, [result])
 
-    def predict(self, image_location="/test_images/plane2.jpg"):
+    def predict(self, image_location="../test_images/plane2.jpg"):
         app_flags = tf.app.flags.FLAGS
         if type(image_location) is not str or image_location == "":
             raise ValueError("Specify valid image location")
@@ -343,11 +352,11 @@ class Classifier(object):
             "total_eval_duration": common.duration_to_string(self.total_eval_duration),
         }
 
-        files.save_pickle(
+        file.save_pickle(
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.pkl")
         )
-        files.save_json(
+        file.save_json(
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.json")
         )

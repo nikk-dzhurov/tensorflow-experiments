@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 import image
-import files
+import file
 import common
 
 RANDOM_SEED = 55355
@@ -23,7 +23,7 @@ class ImageDataset(object):
         result = None
         length = len(pickle_locations)
         for i in range(length):
-            ds = files.load_pickle(pickle_locations[i])
+            ds = file.load_pickle(pickle_locations[i])
             if result is None:
                 result = ds
             else:
@@ -33,7 +33,7 @@ class ImageDataset(object):
         return result
 
     def save_to_pickle(self, name="dataset.pkl"):
-        files.save_pickle(self, name)
+        file.save_pickle(self, name)
 
     def append(self, data, labels):
         if len(data) != len(labels):
@@ -150,7 +150,7 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
     if not os.path.exists(save_location):
         os.makedirs(save_location)
 
-    files.clean_dir(save_location)
+    file.clean_dir(save_location)
 
     # original data
     test_ds = ImageDataset(test_x, test_y)

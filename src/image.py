@@ -53,7 +53,7 @@ class LabeledImage(object):
 
 def randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
     dist = tf.random_crop(image, crop_shape, seed=seed)
-    dist = tf.image.random_contrast(dist, lower=0.7, upper=1.3, seed=seed)
+    dist = tf.image.random_contrast(dist, lower=0.9, upper=1.1, seed=seed)
     dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)
     dist = tf.image.random_flip_left_right(dist, seed=seed)
 

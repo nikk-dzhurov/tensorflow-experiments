@@ -8,7 +8,7 @@ import tensorflow as tf
 from random import randint
 
 import common
-import files
+import file
 import image
 import image_dataset as img_ds
 from image import LabeledImage
@@ -20,7 +20,7 @@ def build_app_flags():
     # They are accessible everywhere in the application via tf.app.flags.FLAGS
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_1_eps0.1_lr_0.0005",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp",
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.3, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
@@ -66,14 +66,14 @@ def load_train_dataset():
 
 def load_eval_dataset():
     dataset = ImageDataset.load_from_pickles([
-        "/datasets/stl10/original_test.pkl",
+        "../datasets/stl10/original_test.pkl",
     ])
 
     return dataset.x, dataset.y
 
 
 def load_original(images_dtype=np.float32, labels_dtype=np.int32):
-    files.maybe_download_and_extract(
+    file.maybe_download_and_extract(
         dest_dir="../data",
         data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
         nested_dir="stl10_binary"
@@ -129,6 +129,10 @@ def model_fn(features, labels, mode, params, config):
 
     # Input Layer
     with tf.name_scope("input_layer"):
+        # input_layer = tf.map_fn(
+        #     fn=lambda x: tf.image.convert_image_dtype(x, tf.float32),
+        #     elems=features["x"]
+        # )
         # if mode == tf.estimator.ModeKeys.TRAIN:
         #     input_layer = tf.map_fn(
         #         fn=lambda img: image.randomly_distort_image(
@@ -259,7 +263,15 @@ def model_fn(features, labels, mode, params, config):
     }
 
     if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=predictions,
+            export_outputs={
+                'predict_output': tf.estimator.export.PredictOutput({
+                    "pred_output_classes": softmax
+                })
+            }
+        )
 
     # Add name to labels tensor
     labels = tf.identity(labels, name="labels")
@@ -320,13 +332,14 @@ def _save_ds_samples():
         "../datasets/stl10/rand_distorted_train_2.pkl",
     ]
     dataset = ImageDataset.load_from_pickles(pickles)
+    items_per_pickle = 11000
 
     for i in range(5):
         images = []
-        idx = randint(0, 10000 - 1)
+        idx = randint(0, items_per_pickle - 1)
         for j in range(len(pickles)):
             images.append(
-                LabeledImage.load_from_dataset(dataset, index=j*10000+idx),
+                LabeledImage.load_from_dataset(dataset, index=j*items_per_pickle+idx, max_value=1),
             )
         LabeledImage(np.concatenate([x.image for x in images], axis=1), images[0].name) \
             .save(location="../samples/", name="{}_{}".format(idx, images[0].name))

@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 import common
-import files
+import file
 
 class EvaluationMapSaverHook(tf.train.SessionRunHook):
     def __init__(self, tensor_names=None, file_name="eval_map.pkl"):
@@ -45,7 +45,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
         self._iter_count += 1
 
     def end(self, session):
-        files.save_pickle(
+        file.save_pickle(
             self._results,
             os.path.join(tf.app.flags.FLAGS.model_dir, self._file_name)
         )
