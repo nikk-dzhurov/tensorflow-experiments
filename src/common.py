@@ -8,7 +8,7 @@ PREDICT_MODE = "predict"
 TRAIN_EVAL_MODE = "train_eval"
 
 
-def parse_known_args(args):
+def parse_known_args(argv):
     """Parse application arguments passed through command line"""
 
     parser = argparse.ArgumentParser()
@@ -44,7 +44,7 @@ def parse_known_args(args):
         help="Set training steps per epoch"
     )
 
-    parsed_args, _ = parser.parse_known_args(args)
+    parsed_args, _ = parser.parse_known_args(argv)
 
     return parsed_args
 
