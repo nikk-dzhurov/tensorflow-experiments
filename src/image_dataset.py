@@ -11,7 +11,19 @@ RANDOM_SEED = 55355
 
 
 class ImageDataset(object):
+    """
+    ImageDataset class for loading/exporting image datasets
+    Also could be used for distorting whole dataset at once
+
+    It supports the following distortions:
+        * mirror images
+        * rotate images by 90 degrees
+        * distort images by modifying contrast
+    """
+
     def __init__(self, data, labels):
+        """Initialize/Construct ImageDataset object"""
+
         self.x = data
         self.y = labels
 
@@ -20,6 +32,8 @@ class ImageDataset(object):
 
     @staticmethod
     def load_from_pickles(pickle_locations):
+        """Load multiple datasets from pickle_locations"""
+
         result = None
         length = len(pickle_locations)
         for i in range(length):
@@ -33,9 +47,13 @@ class ImageDataset(object):
         return result
 
     def save_to_pickle(self, name="dataset.pkl"):
+        """Export dataset to pickle file"""
+
         file.save_pickle(self, name)
 
     def append(self, data, labels):
+        """Append another dataset to current object"""
+
         if len(data) != len(labels):
             raise RuntimeError("Length of data and labels should be equal")
 
@@ -43,6 +61,8 @@ class ImageDataset(object):
         self.y = np.append(self.y, labels)
 
     def mirror_images(self):
+        """Build another ImageDataset by mirroring the images"""
+
         return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
             tf.map_fn(
                 fn=lambda img: tf.image.flip_left_right(img),
@@ -52,11 +72,15 @@ class ImageDataset(object):
         ))
 
     def rot90_images(self, n_times=1):
+        """Build another ImageDataset by rotating the images by 90 degrees, N times"""
+
         return self._distort_on_batches(lambda batch, _: tf.Session().run(
             tf.image.rot90(batch, k=n_times)
         ))
 
     def randomly_distort_images(self, crop_shape, target_size, seed=None):
+        """Build another ImageDataset by distorting the images"""
+
         return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
              tf.map_fn(
                  fn=lambda img: image.randomly_distort_image(
@@ -71,6 +95,8 @@ class ImageDataset(object):
         ))
 
     def _distort_on_batches(self, dist_fn):
+        """Base function for creating new ImageDataset by distorting current ImageDataset on batches"""
+
         random_dist_data = None
         data_len = len(self.x)
         steps = data_len // self.DIST_BATCH_SIZE
@@ -94,6 +120,8 @@ class ImageDataset(object):
         return ImageDataset(random_dist_data, self.y.copy())
 
     def _get_current_batch(self, curr_step):
+        """Get current batch, depending on current step and default BATCH_SIZE"""
+
         start_idx = curr_step * self.DIST_BATCH_SIZE
         end_idx = start_idx + self.DIST_BATCH_SIZE
 
@@ -102,6 +130,7 @@ class ImageDataset(object):
 
 def split_dataset(images, labels, classes_count=10,
                   test_items_per_class=None, test_items_fraction=None):
+    """Split dataset to test and train by given fraction or given number of items per class for test dataset"""
 
     if test_items_per_class is None and test_items_fraction is None:
         raise ValueError("Please specify test_items_per_class or test_items_fraction")
@@ -137,6 +166,7 @@ def split_dataset(images, labels, classes_count=10,
 
 def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3),
                     target_size=32, add_rot90_dist=False, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
+    """Function that applies multiple distortions over original dataset"""
 
     test_x, test_y = test
     train_x, train_y = train
@@ -156,25 +186,26 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
     test_ds = ImageDataset(test_x, test_y)
     train_ds = ImageDataset(train_x, train_y)
 
+    # save original dataset to pickle file
     test_ds.save_to_pickle(
         os.path.join(save_location, "original_test.pkl"))
     train_ds.save_to_pickle(
         os.path.join(save_location, "original_train.pkl"))
 
-    # mirror images in the dataset
+    # mirror images in the dataset and save them to pickle file
     train_ds.mirror_images().save_to_pickle(
         os.path.join(save_location, "mirror_train.pkl"))
 
     if add_rot90_dist:
-        # rot90_1 images in the dataset
+        # rotate images in the dataset by 90 degrees 1 time and save them to pickle file
         train_ds.rot90_images(1).save_to_pickle(
             os.path.join(save_location, "rot_90_1_train.pkl"))
 
-        # rot90_3 images in the dataset
+        # rotate images in the dataset by 90 degrees 3 times and save them to pickle file
         train_ds.rot90_images(3).save_to_pickle(
             os.path.join(save_location, "rot_90_3_train.pkl"))
 
-    # randomly distort images in the dataset
+    # randomly distort images in the dataset and save them to pickle file
     if rand_dist_sets >= 1:
         for i in range(rand_dist_sets):
             train_ds.randomly_distort_images(
@@ -186,6 +217,8 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
 
 
 def _zip_ds_pairs(images, labels):
+    """Zip images and labels in single list"""
+
     zipped_ds = []
     for idx, label in enumerate(labels):
         zipped_ds.append([label, images[idx]])
@@ -194,6 +227,8 @@ def _zip_ds_pairs(images, labels):
 
 
 def _unzip_ds_pairs(ds):
+    """Unzip images and labels from single list"""
+
     ds_x = []
     ds_y = []
 
@@ -202,4 +237,3 @@ def _unzip_ds_pairs(ds):
         ds_x.append(pair[1])
 
     return np.asarray(ds_x), np.asarray(ds_y)
-

@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import time
 import pprint
@@ -12,12 +8,19 @@ import tensorflow as tf
 import hooks
 import common
 import file
-import image
-from image import LabeledImage
 
 
 class Classifier(object):
+    """
+    Classifier class for train, prediction and evaluation
+
+    Classifier object create tf.estimator.Estimator from received dataset module.
+    It provides functions for train, prediction and evaluation.
+    It provides functions for exporting model
+    """
+
     def __init__(self, model_fn, model_params, class_names):
+        """Initialize/Construct Classifier object"""
 
         self.validate_required_app_flags()
 
@@ -50,6 +53,8 @@ class Classifier(object):
 
     @staticmethod
     def validate_required_app_flags():
+        """Validate required tf.app.flags.FLAGS and raise ValueError if validation fails"""
+
         app_flags = tf.app.flags.FLAGS
         required_flags = {
             "model_dir": {"type": str},
@@ -84,11 +89,15 @@ class Classifier(object):
 
     @staticmethod
     def print_ds_details(ds, ds_name="dataset"):
+        """Pretty print dataset details"""
+
         print("{}_x:\n\t shape: {}\n\t type: {}".format(ds_name, ds[0].shape, ds[0].dtype))
         print("{}_y:\n\t shape: {}\n\t type: {}".format(ds_name, ds[1].shape, ds[1].dtype))
 
     @staticmethod
     def get_run_config_from_flags():
+        """Build tf.estimator.RunConfig object from application flags"""
+
         flags = tf.app.flags.FLAGS
         sess_config = tf.ConfigProto()
 
@@ -109,6 +118,8 @@ class Classifier(object):
 
     @staticmethod
     def print_results_as_table(columns, data):
+        """Pretty print array of dictionaries as table by given columns"""
+
         total_len = 0
         col_lens = {}
         columns_map = {}
@@ -123,35 +134,44 @@ class Classifier(object):
 
         def row_string(data):
             res = ""
-            for field in columns:
-                field_key = field[0]
+
+            for f in columns:
+                f_key = f[0]
                 res += "|"
-                res += col_string(data[field_key], " ", col_lens[field_key])
+                res += col_string(data[f_key], " ", col_lens[f_key])
+
             return res + "|"
 
         def col_string(data, pad_symbol, pad_num):
             if type(data) is float or type(data) is np.float32:
                 return "{:{}<{}.6f}".format(data, pad_symbol, pad_num)
+
             return "{:{}<{}}".format(data, pad_symbol, pad_num)
 
         def separator_string():
             res = ""
-            for field in columns:
-                field_key = field[0]
+
+            for f in columns:
+                f_key = f[0]
                 res += "+"
-                res += col_string("", "-", col_lens[field_key])
+                res += col_string("", "-", col_lens[f_key])
+
             return res + "+"
 
         top_bottom_line = "+{:-<{}}+".format('', total_len + len(columns) - 1)
 
         print(top_bottom_line)
         print(row_string(columns_map))
+
         for res in data:
             print(separator_string())
             print(row_string(res))
+
         print(top_bottom_line)
 
     def export_model(self):
+        """Export trained model as SavedModel that could be used in production"""
+
         self._estimator.export_savedmodel(
             export_dir_base=tf.app.flags.FLAGS.model_dir,
             serving_input_receiver_fn=tf.estimator.export.build_parsing_serving_input_receiver_fn({
@@ -167,6 +187,7 @@ class Classifier(object):
               clean_old_model_data=False,
               load_eval_ds_fn=None,
               eval_after_each_epoch=False):
+        """Train model function, that allow evaluation after each training epoch"""
 
         flags = tf.app.flags.FLAGS
 
@@ -213,6 +234,8 @@ class Classifier(object):
         self._save_results()
 
     def eval(self, load_eval_ds_fn, save_eval_map=True, log_tensors=False):
+        """Evaluate model function"""
+
         flags = tf.app.flags.FLAGS
 
         if not callable(load_eval_ds_fn):
@@ -253,10 +276,41 @@ class Classifier(object):
         print("Eval duration: " + common.duration_to_string(duration))
         self.print_results_as_table(self._eval_columns, [result])
 
-    def predict(self, image_location="../test_images/plane2.jpg"):
+    def predict(self, load_predict_ds_fn):
+        """Make predictions for given dataset"""
+
+        flags = tf.app.flags.FLAGS
+
+        if not callable(load_predict_ds_fn):
+            raise ValueError("load_predict_ds_fn argument is not callable")
+
+        pred_x, pred_y = self._get_eval_ds(load_predict_ds_fn)
+
+        input_fn = tf.estimator.inputs.numpy_input_fn(
+            x={"x": pred_x},
+            y=pred_y,
+            batch_size=flags.eval_batch_size,
+            shuffle=False,
+        )
+
+        pred_generator = self._estimator.predict(input_fn=input_fn)
+
+        for idx, res in enumerate(pred_generator):
+            print(res)
+            prediction_class = self._index_to_class_name(res["class"])
+            probability = res["probabilities"][res["class"]]*100
+            actual_class_name = self._index_to_class_name(pred_y)
+
+            print("Prediction: %s(%.2f%%), actual class %s" % (prediction_class, probability,  actual_class_name))
+
+    def predict_image_label(self, image_location, expected_label):
+        """Make prediction for single image from given location"""
+
         app_flags = tf.app.flags.FLAGS
         if type(image_location) is not str or image_location == "":
             raise ValueError("Specify valid image location")
+        if type(expected_label) is not str or expected_label == "":
+            raise ValueError("Specify valid value for actual_label")
 
         img = Image.open(image_location).convert('RGB')
         if img.width != app_flags.image_width or img.height != app_flags.image_height:
@@ -264,7 +318,6 @@ class Classifier(object):
                              .format(app_flags.image_width, app_flags.image_height))
 
         images = common.prepare_images([np.array(img)])
-        actual_class_name = "airplane"
 
         input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": images},
@@ -280,7 +333,7 @@ class Classifier(object):
             prediction_class = self._index_to_class_name(res["class"])
             probability = res["probabilities"][res["class"]]*100
 
-            print("Prediction: %s(%.2f%%), actual class %s" % (prediction_class, probability,  actual_class_name))
+            print("Prediction: %s(%.2f%%), expected label %s" % (prediction_class, probability,  expected_label))
             # print(tf.Session().run(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=res["logits"])))
 
         # LabeledImage(img, "bird", max_value=255).save()
@@ -288,6 +341,8 @@ class Classifier(object):
         # pass
 
     def get_final_eval_result(self):
+        """Get last result from evaluation results and make it JSON serializable"""
+
         if self.eval_results is not None and len(self.eval_results) > 0:
             res = self.eval_results[-1].copy()
             res["accuracy"] = res["accuracy"].item()
@@ -299,36 +354,52 @@ class Classifier(object):
         return res
 
     def _get_eval_ds(self, load_fn):
+        """Lazy load evaluation dataset"""
+
         if self._eval_ds is None:
             self._eval_ds = load_fn()
             # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
-            print("Evaluation dataset loaded successfully!")
+            self._print_ds_loaded("Evaluation")
             self.print_ds_details(self._eval_ds, "eval")
 
         return self._eval_ds
 
-    def _get_train_ds(self, get_fn):
+    def _get_train_ds(self, load_fn):
+        """Lazy load training dataset"""
+
         if self._train_ds is None:
-            self._train_ds = get_fn()
-            print("Training dataset loaded successfully!")
+            self._train_ds = load_fn()
+            self._print_ds_loaded("Training")
             self.print_ds_details(self._train_ds, "train")
 
         return self._train_ds
 
     def _get_predict_ds(self, load_fn):
+        """Lazy load prediction dataset"""
+
         self._predict_ds = load_fn()
-        print("Prediction dataset loaded successfully!")
+        self._print_ds_loaded("Prediction")
         self.print_ds_details(self._predict_ds, "predict")
 
         return self._predict_ds
 
+    @staticmethod
+    def _print_ds_loaded(name):
+        print("{} dataset loaded successfully!".format(name))
+
     def _class_name_to_index(self, class_name):
+        """Convert class name to label index"""
+
         return self.class_names.index(class_name)
 
     def _index_to_class_name(self, idx):
+        """Convert label index to class name"""
+
         return self.class_names[idx]
 
     def _save_results(self):
+        """Export latest results from model training/evaluation in pickle and JSON formats"""
+
         pp = pprint.PrettyPrinter(indent=2, compact=True)
 
         for name in self._estimator.get_variable_names():
@@ -365,4 +436,3 @@ class Classifier(object):
         pp.pprint(model_stats_map)
         print("Total training duration: " + common.duration_to_string(self.total_train_duration))
         print("Total evaluation duration: " + common.duration_to_string(self.total_eval_duration))
-

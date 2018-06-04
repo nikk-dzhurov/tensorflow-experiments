@@ -1,8 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import sys
 import numpy as np
 import tensorflow as tf
 from random import randint
@@ -16,8 +11,10 @@ from image_dataset import ImageDataset
 
 
 def build_app_flags():
-    # Global app parameters
-    # They are accessible everywhere in the application via tf.app.flags.FLAGS
+    """
+        Define required application flags/parameters
+        This parameters are accessible everywhere in the application via tf.app.flags.FLAGS
+    """
 
     # General flags
     tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp",
@@ -47,10 +44,14 @@ def build_app_flags():
 
 
 def get_model_params():
+    """This function returns required model params"""
+
     return {"add_layer_summaries": False}
 
 
 def load_train_dataset():
+    """Load Training dataset from list of pickle files"""
+
     dataset = ImageDataset.load_from_pickles([
         "../datasets/stl10/original_train.pkl",
         "../datasets/stl10/mirror_train.pkl",
@@ -65,6 +66,8 @@ def load_train_dataset():
 
 
 def load_eval_dataset():
+    """Load Evaluation dataset from list of pickle files"""
+
     dataset = ImageDataset.load_from_pickles([
         "../datasets/stl10/original_test.pkl",
     ])
@@ -73,6 +76,8 @@ def load_eval_dataset():
 
 
 def load_original(images_dtype=np.float32, labels_dtype=np.int32):
+    """Load original dataset without any distortions"""
+
     file.maybe_download_and_extract(
         dest_dir="../data",
         data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
@@ -115,6 +120,8 @@ def load_original(images_dtype=np.float32, labels_dtype=np.int32):
 
 
 def get_class_names():
+    """Read class names from file and build mapping between object class and label index"""
+
     with open("../data/stl10_binary/class_names.txt") as f:
         content = f.readlines()
 
@@ -124,6 +131,7 @@ def get_class_names():
 
 
 def model_fn(features, labels, mode, params, config):
+    """Model function that is build for classifying 96x96x3 images in 10 labels"""
 
     app_flags = tf.app.flags.FLAGS
 
@@ -146,7 +154,6 @@ def model_fn(features, labels, mode, params, config):
         # else:
         input_layer = features["x"]
 
-    # Convolution 1
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
         filters=96,
@@ -165,7 +172,6 @@ def model_fn(features, labels, mode, params, config):
         name="pool1"
     )
 
-    # Convolution 2
     conv2 = tf.layers.conv2d(
         inputs=pool1,
         filters=128,
@@ -182,7 +188,6 @@ def model_fn(features, labels, mode, params, config):
         name="pool2"
     )
 
-    # Convolution 3
     conv3 = tf.layers.conv2d(
         inputs=pool2,
         filters=172,
@@ -199,7 +204,6 @@ def model_fn(features, labels, mode, params, config):
         name="pool3"
     )
 
-    # Convolution 4
     conv4 = tf.layers.conv2d(
         inputs=pool3,
         filters=256,
@@ -248,17 +252,17 @@ def model_fn(features, labels, mode, params, config):
     # Logits Layer
     logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
 
+
+    # Calculate predictions
     argmax = tf.argmax(input=logits, axis=1, name="predictions", output_type=tf.int32)
-
-    top_k_values, top_k_indices = tf.nn.top_k(input=logits, k=2)
-    tf.identity(top_k_values, "top_k_values")
-    tf.identity(top_k_indices, "top_k_indices")
-
     softmax = tf.nn.softmax(logits, name="softmax_tensor")
+
+    # top_k_values, top_k_indices = tf.nn.top_k(input=logits, k=2)
+    # tf.identity(top_k_values, "top_k_values")
+    # tf.identity(top_k_indices, "top_k_indices")
 
     predictions = {
         "class": argmax,
-        "logits": logits,
         "probabilities": softmax
     }
 
@@ -299,6 +303,7 @@ def model_fn(features, labels, mode, params, config):
             epsilon=0.1,
             name="adam_optimizer"
         )
+
         train_op = optimizer.minimize(
             loss=loss, global_step=tf.train.get_global_step(), name="minimize_loss")
 
@@ -322,6 +327,8 @@ def model_fn(features, labels, mode, params, config):
 
 
 def _save_ds_samples():
+    """Load datasets from pickle files. Get samples from random indices and save them as JPEG images"""
+
     pickles = [
         "../datasets/stl10/original_train.pkl",
         "../datasets/stl10/mirror_train.pkl",
@@ -346,7 +353,10 @@ def _save_ds_samples():
 
 
 if __name__ == "__main__":
-    # Get samples from Dataset
+    """Add distortions to original STL10 dataset to reduce overfitting"""
+
+    # Get samples from created datasets and save them in ../samples directory
+    # This is used for basic dataset verification
     # _save_ds_samples()
     # sys.exit(0)
 

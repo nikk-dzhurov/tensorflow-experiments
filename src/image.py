@@ -5,8 +5,13 @@ import tensorflow as tf
 
 from image_dataset import ImageDataset
 
+
 class LabeledImage(object):
+    """LabeledImage class for exporting images"""
+
     def __init__(self, image, name="image", max_value=1):
+        """Initialize/Construct LabeledImage object from image data"""
+
         self.image = image
         self.max_value = max_value
         if type(name) is str and name.endswith(".jpg"):
@@ -16,6 +21,8 @@ class LabeledImage(object):
 
     @staticmethod
     def load_from_dataset(dataset, index=0, max_value=1):
+        """Construct LabeledImage object from dataset and image's index in dataset"""
+
         if dataset is None:
             raise ValueError("Invalid initialization parameters provided")
 
@@ -29,6 +36,8 @@ class LabeledImage(object):
         )
 
     def save(self, location=None, name=None, ):
+        """Save image in location"""
+
         if self.image is None:
             raise ValueError("Image data is missing")
 
@@ -40,11 +49,13 @@ class LabeledImage(object):
 
         self.normalize()
 
-        # save image data
+        # save image data(JPEG format)
         img = Image.fromarray(self.image, "RGB")
         img.save(os.path.join(location, name))
 
     def normalize(self):
+        """Normalize image values from range [0, 1] to [0, 255] if necessary"""
+
         if self.max_value != 255:
             self.image = np.multiply(self.image, 255.0 / self.max_value)
             self.image = np.asarray(self.image, dtype=np.int8)
@@ -52,6 +63,11 @@ class LabeledImage(object):
 
 
 def randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
+    """
+    Distort image by random factor
+    This function should be used inside tf.Session
+    """
+
     dist = tf.random_crop(image, crop_shape, seed=seed)
     dist = tf.image.random_contrast(dist, lower=0.9, upper=1.1, seed=seed)
     dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)

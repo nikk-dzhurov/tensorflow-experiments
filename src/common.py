@@ -1,13 +1,6 @@
-import os
-import sys
-import six
-import urllib
-import tarfile
 import argparse
 import numpy as np
 import tensorflow as tf
-
-from image import LabeledImage
 
 EVAL_MODE = "eval"
 TRAIN_MODE = "train"
@@ -15,7 +8,9 @@ PREDICT_MODE = "predict"
 TRAIN_EVAL_MODE = "train_eval"
 
 
-def parse_known_args(argv):
+def parse_known_args(args):
+    """Parse application arguments passed through command line"""
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -49,12 +44,14 @@ def parse_known_args(argv):
         help="Set training steps per epoch"
     )
 
-    parsed_args, _ = parser.parse_known_args()
+    parsed_args, _ = parser.parse_known_args(args)
 
     return parsed_args
 
 
 def duration_to_string(dur_in_sec=0):
+    """Convert duration(int) to string"""
+
     days, remainder = divmod(dur_in_sec, 60*60*24)
     hours, remainder = divmod(remainder, 60*60)
     minutes, seconds = divmod(remainder, 60)
@@ -74,36 +71,22 @@ def duration_to_string(dur_in_sec=0):
 
 
 def prepare_images(images, dtype=np.float32):
+    """
+    Convert type of images' data(int8) to np.float32(by default)
+    Convert data values from range [0,255] to [0, 1] (preparation for model train/eval/predict)
+    """
+
     images = np.asarray(images, dtype=dtype)
 
     return np.multiply(images, 1.0 / 255.0)
 
 
-def load_original_mnist():
-    (train_x, train_y), (test_x, test_y) = tf.keras.datasets.mnist.load_data()
-
-    train_x = prepare_images(train_x)
-    train_y = np.asarray(train_y, dtype=np.int32)
-
-    test_x = prepare_images(test_x)
-    test_y = np.asarray(test_y, dtype=np.int32)
-
-    return (train_x, train_y), (test_x, test_y)
-
-
-def load_original_cifar10():
-    (train_x, train_y), (test_x, test_y) = tf.keras.datasets.cifar10.load_data()
-
-    train_x = prepare_images(train_x)
-    train_y = np.asarray(train_y, dtype=np.int32)
-
-    test_x = prepare_images(test_x)
-    test_y = np.asarray(test_y, dtype=np.int32)
-
-    return (train_x, train_y), (test_x, test_y)
-
-
 def get_learning_rate_from_flags(flags):
+    """
+    Calculate learning rate from flags
+    It is useful for optimizers like GradientDescent which does not have built-in
+    learning rate decay factor
+    """
     if flags.use_static_learning_rate:
         learning_rate = flags.initial_learning_rate
     else:
@@ -120,6 +103,7 @@ def get_learning_rate_from_flags(flags):
 
 def variable_summaries(var):
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+
     with tf.name_scope(var.name.replace(":", "_")):
         mean = tf.reduce_mean(var)
         tf.summary.scalar('mean', mean)
@@ -132,83 +116,109 @@ def variable_summaries(var):
 
 
 def build_layer_summaries(layer_name):
+    """Attach summaries for each variable in the layer's scope"""
+
     for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=layer_name):
         variable_summaries(var)
 
 
-def mixed_layer(input_layer, name="mixed_layer"):
-    with tf.name_scope(name):
-        with tf.name_scope("branch_1x1"):
-            branch_1x1 = tf.layers.conv2d(
-                inputs=input_layer,
-                filters=32,
-                kernel_size=[1, 1],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv1x1"
-            )
-
-        with tf.name_scope("branch_3x3"):
-            conv1x1_3x3 = tf.layers.conv2d(
-                inputs=input_layer,
-                filters=48,
-                kernel_size=[1, 1],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv1x1"
-            )
-            branch_3x3 = tf.layers.conv2d(
-                inputs=conv1x1_3x3,
-                filters=64,
-                kernel_size=[3, 3],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv3x3"
-            )
-
-        with tf.name_scope("branch_5x5"):
-            conv1x1_5x5 = tf.layers.conv2d(
-                inputs=input_layer,
-                filters=8,
-                kernel_size=[1, 1],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv1x1"
-            )
-            branch_5x5 = tf.layers.conv2d(
-                inputs=conv1x1_5x5,
-                filters=16,
-                kernel_size=[5, 5],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv5x5"
-            )
-
-        with tf.name_scope("branch_max_pool"):
-            pool3x3 = tf.layers.max_pooling2d(
-                inputs=input_layer,
-                pool_size=[3, 3],
-                strides=1,
-                padding="same",
-                name="pool3x3"
-            )
-            branch_max_pool = tf.layers.conv2d(
-                inputs=pool3x3,
-                filters=16,
-                kernel_size=[1, 1],
-                strides=1,
-                padding="same",
-                activation=tf.nn.relu,
-                name="conv1x1"
-            )
-
-        with tf.name_scope("concat_module"):
-            result_layer = tf.concat(
-                axis=3, values=[branch_1x1, branch_3x3, branch_5x5, branch_max_pool])
-
-    return result_layer
+# def load_original_mnist():
+#     (train_x, train_y), (test_x, test_y) = tf.keras.datasets.mnist.load_data()
+#
+#     train_x = prepare_images(train_x)
+#     train_y = np.asarray(train_y, dtype=np.int32)
+#
+#     test_x = prepare_images(test_x)
+#     test_y = np.asarray(test_y, dtype=np.int32)
+#
+#     return (train_x, train_y), (test_x, test_y)
+#
+#
+# def load_original_cifar10():
+#     (train_x, train_y), (test_x, test_y) = tf.keras.datasets.cifar10.load_data()
+#
+#     train_x = prepare_images(train_x)
+#     train_y = np.asarray(train_y, dtype=np.int32)
+#
+#     test_x = prepare_images(test_x)
+#     test_y = np.asarray(test_y, dtype=np.int32)
+#
+#     return (train_x, train_y), (test_x, test_y)
+#
+#
+# def mixed_layer(input_layer, name="mixed_layer"):
+#     with tf.name_scope(name):
+#         with tf.name_scope("branch_1x1"):
+#             branch_1x1 = tf.layers.conv2d(
+#                 inputs=input_layer,
+#                 filters=32,
+#                 kernel_size=[1, 1],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv1x1"
+#             )
+#
+#         with tf.name_scope("branch_3x3"):
+#             conv1x1_3x3 = tf.layers.conv2d(
+#                 inputs=input_layer,
+#                 filters=48,
+#                 kernel_size=[1, 1],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv1x1"
+#             )
+#             branch_3x3 = tf.layers.conv2d(
+#                 inputs=conv1x1_3x3,
+#                 filters=64,
+#                 kernel_size=[3, 3],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv3x3"
+#             )
+#
+#         with tf.name_scope("branch_5x5"):
+#             conv1x1_5x5 = tf.layers.conv2d(
+#                 inputs=input_layer,
+#                 filters=8,
+#                 kernel_size=[1, 1],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv1x1"
+#             )
+#             branch_5x5 = tf.layers.conv2d(
+#                 inputs=conv1x1_5x5,
+#                 filters=16,
+#                 kernel_size=[5, 5],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv5x5"
+#             )
+#
+#         with tf.name_scope("branch_max_pool"):
+#             pool3x3 = tf.layers.max_pooling2d(
+#                 inputs=input_layer,
+#                 pool_size=[3, 3],
+#                 strides=1,
+#                 padding="same",
+#                 name="pool3x3"
+#             )
+#             branch_max_pool = tf.layers.conv2d(
+#                 inputs=pool3x3,
+#                 filters=16,
+#                 kernel_size=[1, 1],
+#                 strides=1,
+#                 padding="same",
+#                 activation=tf.nn.relu,
+#                 name="conv1x1"
+#             )
+#
+#         with tf.name_scope("concat_module"):
+#             result_layer = tf.concat(
+#                 axis=3, values=[branch_1x1, branch_3x3, branch_5x5, branch_max_pool])
+#
+#     return result_layer

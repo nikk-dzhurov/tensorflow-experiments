@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 import tensorflow as tf
 
@@ -14,7 +10,7 @@ def main(argv):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     args = common.parse_known_args(argv)
-    print("Running with arguments: ", args)
+    print("Execute the application with arguments: ", args)
 
     ds_module = stl10
 
@@ -55,7 +51,10 @@ def main(argv):
             load_eval_ds_fn=ds_module.load_eval_dataset,
         )
     elif args.mode == common.PREDICT_MODE:
-        classifier.predict()
+        classifier.predict_image_label(
+            image_location="../test_images/plane2.jpg",
+            expected_label="airplane"
+        )
     else:
         print("Model mode \"{}\" is not supported".format(args.mode))
         sys.exit(1)

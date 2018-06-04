@@ -2,11 +2,18 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import common
 import file
 
+
 class EvaluationMapSaverHook(tf.train.SessionRunHook):
+    """
+    EvaluationMapSaverHook class for extracting evaluation tensors
+    It extends tf.train.SessionRunHook to access tensors in the current session
+    """
+
     def __init__(self, tensor_names=None, file_name="eval_map.pkl"):
+        """Initialize/Construct EvaluationMapSaverHook object"""
+
         if tensor_names is None or len(tensor_names) == 0:
             raise ValueError("tensorNames should has at least 1 element")
         if type(file_name) is not str or file_name == "":
@@ -52,6 +59,8 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
 
 
 def _get_graph_element(tensor_name):
+    """Extract tensor from the model's graph"""
+
     if type(tensor_name) is not str:
         raise ValueError("Passed argument %s should be of type string".format(tensor_name))
 
