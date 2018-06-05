@@ -51,8 +51,8 @@ if __name__ == "__main__":
         print("Loaded meta graph file '" + input_graph)
         return input_meta_graph_def
 
-    graph = _parse_input_graph_proto("/models/stl10/adamOp_1_eps0.1_lr_0.0005/graph.pbtxt", False)
-    # # graph2 = _parse_input_meta_graph_proto("/models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-4502", False)
+    graph = _parse_input_graph_proto("../models/stl10/adamOp_1_eps0.1_lr_0.0005/graph.pbtxt", False)
+    # # graph2 = _parse_input_meta_graph_proto("../models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-4502", False)
     #
     # print(graph)
 
@@ -76,8 +76,8 @@ if __name__ == "__main__":
 
 
     with tf.Session() as sess:
-        saver = tf.train.import_meta_graph("/models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-5000.meta")
-        saver.restore(sess, '/models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-5000')
+        saver = tf.train.import_meta_graph("../models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-5000.meta")
+        saver.restore(sess, '../models/stl10/adamOp_1_eps0.1_lr_0.0005/model.ckpt-5000')
 
         saver0 = tf.train.Saver()
         saver0.save(sess, 'models/my-model-10000')

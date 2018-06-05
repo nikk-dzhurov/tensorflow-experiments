@@ -79,17 +79,17 @@ def load_original(images_dtype=np.float32, labels_dtype=np.int32):
     """Load original dataset without any distortions"""
 
     file.maybe_download_and_extract(
-        dest_dir="../data",
+        dest_dir="../data/stl10",
         data_url="http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz",
         nested_dir="stl10_binary"
     )
 
     # data paths
-    train_x_path = '../data/stl10_binary/train_X.bin'
-    train_y_path = '../data/stl10_binary/train_y.bin'
+    train_x_path = '../data/stl10/stl10_binary/train_X.bin'
+    train_y_path = '../data/stl10/stl10_binary/train_y.bin'
 
-    test_x_path = '../data/stl10_binary/test_X.bin'
-    test_y_path = '../data/stl10_binary/test_y.bin'
+    test_x_path = '../data/stl10/stl10_binary/test_X.bin'
+    test_y_path = '../data/stl10/stl10_binary/test_y.bin'
 
     def read_labels(path_to_labels):
         with open(path_to_labels, 'rb') as f:
