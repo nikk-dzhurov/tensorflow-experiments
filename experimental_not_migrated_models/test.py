@@ -7,7 +7,6 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
-import common
 import image_dataset as ds
 
 print("Just test")

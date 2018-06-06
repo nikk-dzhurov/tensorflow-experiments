@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 from random import randint
 
-import common
 import file
 import image
 import image_dataset as img_ds
@@ -43,6 +42,47 @@ def build_app_flags():
     tf.app.flags.DEFINE_integer("image_channels", 3, "Image channels")
 
 
+def get_learning_rate_from_flags(flags):
+    """
+    Calculate learning rate from flags
+    It is useful for optimizers like GradientDescent which does not have built-in
+    learning rate decay factor
+    """
+    if flags.use_static_learning_rate:
+        learning_rate = flags.initial_learning_rate
+    else:
+        learning_rate = tf.train.exponential_decay(
+            learning_rate=flags.initial_learning_rate,
+            global_step=tf.train.get_global_step(),
+            decay_steps=flags.learning_rate_decay_steps,
+            decay_rate=flags.learning_rate_decay_rate,
+            name="learning_rate"
+        )
+
+    return learning_rate
+
+
+def variable_summaries(var):
+    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+
+    with tf.name_scope(var.name.replace(":", "_")):
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar('mean', mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.summary.scalar('stddev', stddev)
+        tf.summary.scalar('max', tf.reduce_max(var))
+        tf.summary.scalar('min', tf.reduce_min(var))
+        tf.summary.histogram('histogram', var)
+
+
+def build_layer_summaries(layer_name):
+    """Attach summaries for each variable in the layer's scope"""
+
+    for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=layer_name):
+        variable_summaries(var)
+
+
 def get_model_params():
     """This function returns required model params"""
 
@@ -75,7 +115,7 @@ def load_eval_dataset():
     return dataset.x, dataset.y
 
 
-def load_original(images_dtype=np.float32, labels_dtype=np.int32):
+def load_original_dataset(images_dtype=np.float32, labels_dtype=np.int32):
     """Load original dataset without any distortions"""
 
     file.maybe_download_and_extract(
@@ -110,10 +150,10 @@ def load_original(images_dtype=np.float32, labels_dtype=np.int32):
     test_y = read_labels(test_y_path)
 
     # prepare images/labels for training
-    train_x = common.prepare_images(train_x, dtype=images_dtype)
+    train_x = img_ds.prepare_images(train_x, dtype=images_dtype)
     train_y = np.asarray(train_y, dtype=labels_dtype)
 
-    test_x = common.prepare_images(test_x, dtype=images_dtype)
+    test_x = img_ds.prepare_images(test_x, dtype=images_dtype)
     test_y = np.asarray(test_y, dtype=labels_dtype)
 
     return (train_x, np.add(train_y, -1)), (test_x, np.add(test_y, -1))
@@ -122,7 +162,7 @@ def load_original(images_dtype=np.float32, labels_dtype=np.int32):
 def get_class_names():
     """Read class names from file and build mapping between object class and label index"""
 
-    with open("../data/stl10_binary/class_names.txt") as f:
+    with open("../data/stl10/stl10_binary/class_names.txt") as f:
         content = f.readlines()
 
     class_names = [x.strip() for x in content]
@@ -243,7 +283,7 @@ def model_fn(features, labels, mode, params, config):
     if params.get("add_layer_summaries", False) is True:
         weighted_layers_names = ["conv1", "conv2", "conv3", "conv4", "dense1", "dense2", "dense3"]
         for layer_name in weighted_layers_names:
-            common.build_layer_summaries(layer_name)
+            build_layer_summaries(layer_name)
 
     with tf.name_scope("dropout"):
         dropout = tf.layers.dropout(
@@ -326,7 +366,7 @@ def model_fn(features, labels, mode, params, config):
     )
 
 
-def _save_ds_samples():
+def save_ds_samples():
     """Load datasets from pickle files. Get samples from random indices and save them as JPEG images"""
 
     pickles = [
@@ -341,7 +381,7 @@ def _save_ds_samples():
     dataset = ImageDataset.load_from_pickles(pickles)
     items_per_pickle = 11000
 
-    for i in range(5):
+    for i in range(20):
         images = []
         idx = randint(0, items_per_pickle - 1)
         for j in range(len(pickles)):
@@ -352,15 +392,10 @@ def _save_ds_samples():
             .save(location="../samples/", name="{}_{}".format(idx, images[0].name))
 
 
-if __name__ == "__main__":
+def extend_original_data():
     """Add distortions to original STL10 dataset to reduce overfitting"""
 
-    # Get samples from created datasets and save them in ../samples directory
-    # This is used for basic dataset verification
-    # _save_ds_samples()
-    # sys.exit(0)
-
-    train, test = load_original()
+    train, test = load_original_dataset()
 
     train, test = img_ds.split_dataset(
         images=np.concatenate([train[0], test[0]], axis=0),

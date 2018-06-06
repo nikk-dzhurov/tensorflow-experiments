@@ -35,7 +35,7 @@ class LabeledImage(object):
             max_value=max_value,
         )
 
-    def save(self, location=None, name=None, ):
+    def save(self, location=None, name=None):
         """Save image in location"""
 
         if self.image is None:
@@ -60,17 +60,3 @@ class LabeledImage(object):
             self.image = np.multiply(self.image, 255.0 / self.max_value)
             self.image = np.asarray(self.image, dtype=np.int8)
             self.max_value = 255
-
-
-def randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
-    """
-    Distort image by random factor
-    This function should be used inside tf.Session
-    """
-
-    dist = tf.random_crop(image, crop_shape, seed=seed)
-    dist = tf.image.random_contrast(dist, lower=0.9, upper=1.1, seed=seed)
-    dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)
-    dist = tf.image.random_flip_left_right(dist, seed=seed)
-
-    return tf.image.resize_image_with_crop_or_pad(dist, target_size, target_size)

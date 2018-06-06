@@ -5,7 +5,6 @@ import tensorflow as tf
 
 import image
 import file
-import common
 
 RANDOM_SEED = 55355
 
@@ -127,6 +126,20 @@ class ImageDataset(object):
 
         return self.x[start_idx:end_idx]
 
+    @staticmethod
+    def _randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
+        """
+        Distort image by random factor
+        This function should be used inside tf.Session
+        """
+
+        dist = tf.random_crop(image, crop_shape, seed=seed)
+        dist = tf.image.random_contrast(dist, lower=0.9, upper=1.1, seed=seed)
+        dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)
+        dist = tf.image.random_flip_left_right(dist, seed=seed)
+
+        return tf.image.resize_image_with_crop_or_pad(dist, target_size, target_size)
+
 
 def split_dataset(images, labels, classes_count=10,
                   test_items_per_class=None, test_items_fraction=None):
@@ -237,3 +250,13 @@ def _unzip_ds_pairs(ds):
         ds_x.append(pair[1])
 
     return np.asarray(ds_x), np.asarray(ds_y)
+
+def prepare_images(images, dtype=np.float32):
+    """
+    Convert type of images' data(int8) to np.float32(by default)
+    Convert data values from range [0,255] to [0, 1] (preparation for model train/eval/predict)
+    """
+
+    images = np.asarray(images, dtype=dtype)
+
+    return np.multiply(images, 1.0 / 255.0)

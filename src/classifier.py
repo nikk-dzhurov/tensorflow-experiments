@@ -5,9 +5,9 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
-import hooks
-import common
 import file
+import hooks
+import image_dataset
 
 
 class Classifier(object):
@@ -225,7 +225,7 @@ class Classifier(object):
             duration = round(time.time() - start_time, 3)
             self.total_train_duration += duration
 
-            print("Training duration: " + common.duration_to_string(duration))
+            print("Training duration: " + self._duration_to_string(duration))
             print("Training epoch {} of {} completed".format(i+1, epochs))
 
             if eval_after_each_epoch:
@@ -273,7 +273,7 @@ class Classifier(object):
         duration = round(time.time() - start_time, 3)
         self.total_eval_duration += duration
 
-        print("Eval duration: " + common.duration_to_string(duration))
+        print("Eval duration: " + self._duration_to_string(duration))
         self.print_results_as_table(self._eval_columns, [result])
 
     def predict(self, load_predict_ds_fn):
@@ -317,7 +317,7 @@ class Classifier(object):
             raise ValueError("Please provide image with dimensions: {}x{}"
                              .format(app_flags.image_width, app_flags.image_height))
 
-        images = common.prepare_images([np.array(img)])
+        images = image_dataset.prepare_images([np.array(img)])
 
         input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": images},
@@ -397,6 +397,27 @@ class Classifier(object):
 
         return self.class_names[idx]
 
+    @staticmethod
+    def _duration_to_string(dur_in_sec=0):
+        """Convert duration(int) to string"""
+
+        days, remainder = divmod(dur_in_sec, 60 * 60 * 24)
+        hours, remainder = divmod(remainder, 60 * 60)
+        minutes, seconds = divmod(remainder, 60)
+        output = ""
+        if days > 0:
+            output += "%d days, " % days
+        if hours > 0:
+            output = "%d hours, " % hours
+        if minutes > 0:
+            output += "%d min, " % minutes
+        if seconds > 0 or len(output) == 0:
+            output += "%.3f sec" % seconds
+        if output[-2:] == ", ":
+            output = output[:-2]
+
+        return output
+
     def _save_results(self):
         """Export latest results from model training/evaluation in pickle and JSON formats"""
 
@@ -419,8 +440,8 @@ class Classifier(object):
         model_stats_map = {
             "model_details": self.model_details,
             "final_result": self.get_final_eval_result(),
-            "total_train_duration": common.duration_to_string(self.total_train_duration),
-            "total_eval_duration": common.duration_to_string(self.total_eval_duration),
+            "total_train_duration": self._duration_to_string(self.total_train_duration),
+            "total_eval_duration": self._duration_to_string(self.total_eval_duration),
         }
 
         file.save_pickle(
@@ -434,5 +455,5 @@ class Classifier(object):
 
         self.print_results_as_table(self._eval_columns, self.eval_results)
         pp.pprint(model_stats_map)
-        print("Total training duration: " + common.duration_to_string(self.total_train_duration))
-        print("Total evaluation duration: " + common.duration_to_string(self.total_eval_duration))
+        print("Total training duration: " + self._duration_to_string(self.total_train_duration))
+        print("Total evaluation duration: " + self._duration_to_string(self.total_eval_duration))
