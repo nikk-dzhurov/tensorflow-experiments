@@ -88,13 +88,6 @@ class Classifier(object):
                     raise Exception("Flag \"{}\" should be in range({}, {}), received: {}".format(flag_name, validations["range"][0], validations["range"][1], flag_value))
 
     @staticmethod
-    def print_ds_details(ds, ds_name="dataset"):
-        """Pretty print dataset details"""
-
-        print("{}_x:\n\t shape: {}\n\t type: {}".format(ds_name, ds[0].shape, ds[0].dtype))
-        print("{}_y:\n\t shape: {}\n\t type: {}".format(ds_name, ds[1].shape, ds[1].dtype))
-
-    @staticmethod
     def get_run_config_from_flags():
         """Build tf.estimator.RunConfig object from application flags"""
 
@@ -115,59 +108,6 @@ class Classifier(object):
             save_checkpoints_steps=500,
             keep_checkpoint_max=10,
         )
-
-    @staticmethod
-    def print_results_as_table(columns, data):
-        """Pretty print array of dictionaries as table by given columns"""
-
-        total_len = 0
-        col_lens = {}
-        columns_map = {}
-
-        for field in columns:
-            field_key = field[0]
-            field_name = field[1]
-            columns_map[field_key] = field_name
-            v_len = max(len(field_name) + 1, 10)
-            col_lens[field_key] = v_len
-            total_len += v_len
-
-        def row_string(data):
-            res = ""
-
-            for f in columns:
-                f_key = f[0]
-                res += "|"
-                res += col_string(data[f_key], " ", col_lens[f_key])
-
-            return res + "|"
-
-        def col_string(data, pad_symbol, pad_num):
-            if type(data) is float or type(data) is np.float32:
-                return "{:{}<{}.6f}".format(data, pad_symbol, pad_num)
-
-            return "{:{}<{}}".format(data, pad_symbol, pad_num)
-
-        def separator_string():
-            res = ""
-
-            for f in columns:
-                f_key = f[0]
-                res += "+"
-                res += col_string("", "-", col_lens[f_key])
-
-            return res + "+"
-
-        top_bottom_line = "+{:-<{}}+".format('', total_len + len(columns) - 1)
-
-        print(top_bottom_line)
-        print(row_string(columns_map))
-
-        for res in data:
-            print(separator_string())
-            print(row_string(res))
-
-        print(top_bottom_line)
 
     def export_model(self):
         """Export trained model as SavedModel that could be used in production"""
@@ -353,49 +293,69 @@ class Classifier(object):
 
         return res
 
-    def _get_eval_ds(self, load_fn):
-        """Lazy load evaluation dataset"""
+    @staticmethod
+    def print_results_as_table(columns, data):
+        """Pretty print array of dictionaries as table by given columns"""
 
-        if self._eval_ds is None:
-            self._eval_ds = load_fn()
-            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
-            self._print_ds_loaded("Evaluation")
-            self.print_ds_details(self._eval_ds, "eval")
+        total_len = 0
+        col_lens = {}
+        columns_map = {}
 
-        return self._eval_ds
+        for field in columns:
+            field_key = field[0]
+            field_name = field[1]
+            columns_map[field_key] = field_name
+            v_len = max(len(field_name) + 1, 10)
+            col_lens[field_key] = v_len
+            total_len += v_len
 
-    def _get_train_ds(self, load_fn):
-        """Lazy load training dataset"""
+        def row_string(data):
+            res = ""
 
-        if self._train_ds is None:
-            self._train_ds = load_fn()
-            self._print_ds_loaded("Training")
-            self.print_ds_details(self._train_ds, "train")
+            for f in columns:
+                f_key = f[0]
+                res += "|"
+                res += col_string(data[f_key], " ", col_lens[f_key])
 
-        return self._train_ds
+            return res + "|"
 
-    def _get_predict_ds(self, load_fn):
-        """Lazy load prediction dataset"""
+        def col_string(data, pad_symbol, pad_num):
+            if type(data) is float or type(data) is np.float32:
+                return "{:{}<{}.6f}".format(data, pad_symbol, pad_num)
 
-        self._predict_ds = load_fn()
-        self._print_ds_loaded("Prediction")
-        self.print_ds_details(self._predict_ds, "predict")
+            return "{:{}<{}}".format(data, pad_symbol, pad_num)
 
-        return self._predict_ds
+        def separator_string():
+            res = ""
+
+            for f in columns:
+                f_key = f[0]
+                res += "+"
+                res += col_string("", "-", col_lens[f_key])
+
+            return res + "+"
+
+        top_bottom_line = "+{:-<{}}+".format('', total_len + len(columns) - 1)
+
+        print(top_bottom_line)
+        print(row_string(columns_map))
+
+        for res in data:
+            print(separator_string())
+            print(row_string(res))
+
+        print(top_bottom_line)
+
+    @staticmethod
+    def _print_ds_details(ds, ds_name="dataset"):
+        """Pretty print dataset details"""
+
+        print("{}_x:\n\t shape: {}\n\t type: {}".format(ds_name, ds[0].shape, ds[0].dtype))
+        print("{}_y:\n\t shape: {}\n\t type: {}".format(ds_name, ds[1].shape, ds[1].dtype))
 
     @staticmethod
     def _print_ds_loaded(name):
         print("{} dataset loaded successfully!".format(name))
-
-    def _class_name_to_index(self, class_name):
-        """Convert class name to label index"""
-
-        return self.class_names.index(class_name)
-
-    def _index_to_class_name(self, idx):
-        """Convert label index to class name"""
-
-        return self.class_names[idx]
 
     @staticmethod
     def _duration_to_string(dur_in_sec=0):
@@ -417,6 +377,37 @@ class Classifier(object):
             output = output[:-2]
 
         return output
+
+    def _get_eval_ds(self, load_fn):
+        """Lazy load evaluation dataset"""
+
+        if self._eval_ds is None:
+            self._eval_ds = load_fn()
+            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
+            self._print_ds_loaded("Evaluation")
+            self.print_ds_details(self._eval_ds, "eval")
+
+        return self._eval_ds
+
+    def _get_train_ds(self, load_fn):
+        """Lazy load training dataset"""
+
+        if self._train_ds is None:
+            self._train_ds = load_fn()
+            self._print_ds_loaded("Training")
+            self.print_ds_details(self._train_ds, "train")
+
+        return self._train_ds
+
+    def _class_name_to_index(self, class_name):
+        """Convert class name to label index"""
+
+        return self.class_names.index(class_name)
+
+    def _index_to_class_name(self, idx):
+        """Convert label index to class name"""
+
+        return self.class_names[idx]
 
     def _save_results(self):
         """Export latest results from model training/evaluation in pickle and JSON formats"""

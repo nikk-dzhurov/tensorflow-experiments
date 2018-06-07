@@ -127,7 +127,7 @@ class ImageDataset(object):
         return self.x[start_idx:end_idx]
 
     @staticmethod
-    def _randomly_distort_image(image, crop_shape=(26, 26, 3), target_size=32, seed=None):
+    def _randomly_distort_image(image, crop_shape, target_size, seed=None):
         """
         Distort image by random factor
         This function should be used inside tf.Session
@@ -141,7 +141,7 @@ class ImageDataset(object):
         return tf.image.resize_image_with_crop_or_pad(dist, target_size, target_size)
 
 
-def split_dataset(images, labels, classes_count=10,
+def split_dataset(images, labels, classes_count,
                   test_items_per_class=None, test_items_fraction=None):
     """Split dataset to test and train by given fraction or given number of items per class for test dataset"""
 
@@ -177,8 +177,9 @@ def split_dataset(images, labels, classes_count=10,
     return train_ds, test_ds
 
 
-def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26, 3),
-                    target_size=32, add_rot90_dist=False, rand_dist_sets=1, seed=RANDOM_SEED, save_location=None):
+def improve_dataset(train, test, dataset_name, crop_shape,
+                    target_size, add_rot90_dist=False, rand_dist_sets=1,
+                    seed=RANDOM_SEED, save_location=None):
     """Function that applies multiple distortions over original dataset"""
 
     test_x, test_y = test
@@ -229,6 +230,17 @@ def improve_dataset(train, test, dataset_name="dataset_name", crop_shape=(26, 26
     print("Improving dataset is completed")
 
 
+def prepare_images(images, dtype=np.float32):
+    """
+    Convert type of images' data(int8) to np.float32(by default)
+    Convert data values from range [0,255] to [0, 1] (preparation for model train/eval/predict)
+    """
+
+    images = np.asarray(images, dtype=dtype)
+
+    return np.multiply(images, 1.0 / 255.0)
+
+
 def _zip_ds_pairs(images, labels):
     """Zip images and labels in single list"""
 
@@ -250,13 +262,3 @@ def _unzip_ds_pairs(ds):
         ds_x.append(pair[1])
 
     return np.asarray(ds_x), np.asarray(ds_y)
-
-def prepare_images(images, dtype=np.float32):
-    """
-    Convert type of images' data(int8) to np.float32(by default)
-    Convert data values from range [0,255] to [0, 1] (preparation for model train/eval/predict)
-    """
-
-    images = np.asarray(images, dtype=dtype)
-
-    return np.multiply(images, 1.0 / 255.0)

@@ -170,6 +170,22 @@ def get_class_names():
     return class_names
 
 
+# def distort_features(features):
+# input_layer = tf.map_fn(
+#     fn=lambda x: tf.image.convert_image_dtype(x, tf.float32),
+#     elems=features["x"]
+# )
+# if mode == tf.estimator.ModeKeys.TRAIN:
+#     return tf.map_fn(
+#         fn=lambda img: image.randomly_distort_image(
+#             image=img,
+#             crop_shape=(72, 72, 3),
+#             target_size=96,
+#         ),
+#         elems=features["x"],
+#         parallel_iterations=128
+#     )
+
 def model_fn(features, labels, mode, params, config):
     """Model function that is build for classifying 96x96x3 images in 10 labels"""
 
@@ -177,21 +193,6 @@ def model_fn(features, labels, mode, params, config):
 
     # Input Layer
     with tf.name_scope("input_layer"):
-        # input_layer = tf.map_fn(
-        #     fn=lambda x: tf.image.convert_image_dtype(x, tf.float32),
-        #     elems=features["x"]
-        # )
-        # if mode == tf.estimator.ModeKeys.TRAIN:
-        #     input_layer = tf.map_fn(
-        #         fn=lambda img: image.randomly_distort_image(
-        #             image=img,
-        #             crop_shape=(72, 72, 3),
-        #             target_size=96,
-        #         ),
-        #         elems=features["x"],
-        #         parallel_iterations=128
-        #     )
-        # else:
         input_layer = features["x"]
 
     conv1 = tf.layers.conv2d(
@@ -398,6 +399,7 @@ def extend_original_data():
     train, test = load_original_dataset()
 
     train, test = img_ds.split_dataset(
+        classes_count=10,
         images=np.concatenate([train[0], test[0]], axis=0),
         labels=np.concatenate([train[1], test[1]], axis=0),
         # test_items_fraction=0.25,
