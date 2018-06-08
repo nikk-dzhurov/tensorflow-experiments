@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 import file
+from image import LabeledImage
 
 
 class EvaluationMapSaverHook(tf.train.SessionRunHook):
@@ -15,7 +16,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
         """Initialize/Construct EvaluationMapSaverHook object"""
 
         if tensor_names is None or len(tensor_names) == 0:
-            raise ValueError("tensorNames should has at least 1 element")
+            raise ValueError("tensor_names should has at least 1 element")
         if type(file_name) is not str or file_name == "":
             raise ValueError("file_location should be valid string")
 
@@ -24,13 +25,13 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
         self._should_trigger = False
         self._results = {}
         self._file_name = file_name
-        self._tensors_names = tensor_names
+        self._tensor_names = tensor_names
         self._timer = tf.train.SecondOrStepTimer(every_steps=1)
 
     def begin(self):
         self._timer.reset()
         self._iter_count = 0
-        self._tensors = [_get_graph_element(t_name) for t_name in self._tensors_names]
+        self._tensors = [_get_graph_element(t_name) for t_name in self._tensor_names]
 
     def before_run(self, run_context):  # pylint: disable=unused-argument
         self._should_trigger = self._timer.should_trigger_for_step(self._iter_count)
@@ -41,8 +42,7 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
 
     def after_run(self, run_context, run_values):  # pylint: disable=unused-argument
         if self._should_trigger:
-            len(run_values)
-            for idx, t_name in enumerate(self._tensors_names):
+            for idx, t_name in enumerate(self._tensor_names):
                 if self._results.get(t_name, None) is None:
                     self._results[t_name] = run_values.results[idx]
                 else:

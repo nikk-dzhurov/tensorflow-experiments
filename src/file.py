@@ -45,6 +45,21 @@ def load_pickle(filename):
         return pickle.load(fp)
 
 
+def save_txt(data, filename):
+    """Save data in text file"""
+
+    with open(filename, 'w') as fp:
+        fp.write(data)
+        print("%s saved" % filename)
+
+
+def load_txt(filename):
+    """Load data from text file"""
+
+    with open(filename, 'w') as fp:
+        return fp.read()
+
+
 def _track_progress(count, block_size, total_size):
     """Progress report function"""
 

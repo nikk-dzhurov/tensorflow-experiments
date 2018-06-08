@@ -12,7 +12,7 @@ RANDOM_SEED = 55355
 class ImageDataset(object):
     """
     ImageDataset class for loading/exporting image datasets
-    Also could be used for distorting whole dataset at once
+    Also could be used for distorting the whole dataset at once
 
     It supports the following distortions:
         * mirror images
@@ -82,7 +82,7 @@ class ImageDataset(object):
 
         return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
              tf.map_fn(
-                 fn=lambda img: image.randomly_distort_image(
+                 fn=lambda img: self._randomly_distort_image(
                      image=img,
                      crop_shape=crop_shape,
                      target_size=target_size,
@@ -134,8 +134,8 @@ class ImageDataset(object):
         """
 
         dist = tf.random_crop(image, crop_shape, seed=seed)
-        dist = tf.image.random_contrast(dist, lower=0.9, upper=1.1, seed=seed)
-        dist = tf.image.random_hue(dist, max_delta=0.1, seed=seed)
+        dist = tf.image.random_contrast(dist, lower=0.7, upper=1.3, seed=seed)
+        dist = tf.image.random_brightness(dist, max_delta=0.3, seed=seed)
         dist = tf.image.random_flip_left_right(dist, seed=seed)
 
         return tf.image.resize_image_with_crop_or_pad(dist, target_size, target_size)
@@ -235,7 +235,6 @@ def prepare_images(images, dtype=np.float32):
     Convert type of images' data(int8) to np.float32(by default)
     Convert data values from range [0,255] to [0, 1] (preparation for model train/eval/predict)
     """
-
     images = np.asarray(images, dtype=dtype)
 
     return np.multiply(images, 1.0 / 255.0)
@@ -243,8 +242,8 @@ def prepare_images(images, dtype=np.float32):
 
 def _zip_ds_pairs(images, labels):
     """Zip images and labels in single list"""
-
     zipped_ds = []
+
     for idx, label in enumerate(labels):
         zipped_ds.append([label, images[idx]])
 
@@ -253,7 +252,6 @@ def _zip_ds_pairs(images, labels):
 
 def _unzip_ds_pairs(ds):
     """Unzip images and labels from single list"""
-
     ds_x = []
     ds_y = []
 

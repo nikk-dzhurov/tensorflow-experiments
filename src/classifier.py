@@ -19,29 +19,33 @@ class Classifier(object):
     It provides functions for exporting model
     """
 
-    def __init__(self, model_fn, model_params, class_names):
+    def __init__(self, ds_module):
         """Initialize/Construct Classifier object"""
 
-        self.validate_required_app_flags()
+        self.validate_ds_module(ds_module)
 
-        self.class_names = class_names
+        ds_module.build_app_flags()
+        self.validate_required_app_flags()
 
         self._eval_ds = None
         self._train_ds = None
         self._predict_ds = None
         self.model_details = {
             "model_flags": tf.app.flags.FLAGS.flag_values_dict(),
-            "model_params": model_params,
+            "model_params": ds_module.get_model_params(),
             "model_vars": {}
         }
         self.eval_results = []
         self.total_eval_duration = 0
         self.total_train_duration = 0
 
+        self.ds_module = ds_module
+        self.class_names = ds_module.get_class_names()
+
         self._estimator = tf.estimator.Estimator(
-            model_fn=model_fn,
+            model_fn=ds_module.model_fn,
             model_dir=tf.app.flags.FLAGS.model_dir,
-            params=model_params,
+            params=ds_module.get_model_params(),
             config=self.get_run_config_from_flags(),
         )
 
@@ -50,6 +54,23 @@ class Classifier(object):
             ('accuracy', 'Accuracy'),
             ('loss', 'Loss'),
         ]
+
+    @staticmethod
+    def validate_ds_module(ds_module):
+        required_functions = [
+            "build_app_flags",
+            "model_fn",
+            "load_eval_dataset",
+            "load_train_dataset",
+            "get_model_params",
+            "get_class_names"
+        ]
+
+        for func_name in required_functions:
+            func = getattr(ds_module, func_name, None)
+            if not callable(func):
+                raise Exception(
+                    "Dataset module does not provide function with name {}".format(func_name))
 
     @staticmethod
     def validate_required_app_flags():
@@ -78,14 +99,17 @@ class Classifier(object):
                 raise Exception("Flag \"{}\" is not defined or has None value".format(flag_name))
 
             if type(flag_value) is not validations["type"]:
-                raise Exception("Flag \"{}\" should be of type: {}, received: {}".format(flag_name, validations["type"], type(flag_value)))
+                raise Exception("Flag \"{}\" should be of type: {}, received: {}"
+                                .format(flag_name, validations["type"], type(flag_value)))
 
             if validations["type"] is str and flag_value == "":
                 raise Exception("Flag \"{}\" should not be empty string".format(flag_name))
 
             if validations["type"] is int or validations["type"] is float:
                 if flag_value < validations["range"][0] or flag_value > validations["range"][1]:
-                    raise Exception("Flag \"{}\" should be in range({}, {}), received: {}".format(flag_name, validations["range"][0], validations["range"][1], flag_value))
+                    raise Exception("Flag \"{}\" should be in range({}, {}), received: {}"
+                                    .format(flag_name, validations["range"][0],
+                                            validations["range"][1], flag_value))
 
     @staticmethod
     def get_run_config_from_flags():
@@ -103,10 +127,10 @@ class Classifier(object):
 
         return tf.estimator.RunConfig(
             session_config=sess_config,
-            log_step_count_steps=50,
-            save_summary_steps=50,
-            save_checkpoints_steps=500,
-            keep_checkpoint_max=10,
+            log_step_count_steps=100,
+            save_summary_steps=100,
+            save_checkpoints_steps=1000,
+            keep_checkpoint_max=30,
         )
 
     def export_model(self):
@@ -122,10 +146,8 @@ class Classifier(object):
 
     def train(self,
               steps,
-              load_train_ds_fn,
               epochs=1,
               clean_old_model_data=False,
-              load_eval_ds_fn=None,
               eval_after_each_epoch=False):
         """Train model function, that allow evaluation after each training epoch"""
 
@@ -135,15 +157,11 @@ class Classifier(object):
             raise Exception("Invalid steps argument")
         if type(epochs) is not int or 1 < epochs > 100:
             raise Exception("Invalid epochs argument")
-        if not callable(load_train_ds_fn):
-            raise Exception("load_train_ds_fn argument is not callable")
-        if eval_after_each_epoch and not callable(load_eval_ds_fn):
-            raise Exception("load_eval_ds_fn argument is not callable")
 
         if clean_old_model_data:
             file.clean_dir(flags.model_dir)
 
-        train_x, train_y = self._get_train_ds(load_train_ds_fn)
+        train_x, train_y = self._get_train_ds()
 
         train_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": train_x},
@@ -169,62 +187,70 @@ class Classifier(object):
             print("Training epoch {} of {} completed".format(i+1, epochs))
 
             if eval_after_each_epoch:
-                self.eval(load_eval_ds_fn, save_eval_map=False)
+                self.eval(save_eval_map=False)
 
         self._save_results()
 
-    def eval(self, load_eval_ds_fn, save_eval_map=True, log_tensors=False):
+    def eval(self, save_eval_map=True, log_tensors=True):
         """Evaluate model function"""
 
         flags = tf.app.flags.FLAGS
 
-        if not callable(load_eval_ds_fn):
-            raise Exception("load_eval_ds_fn argument is not callable")
-
-        eval_x, eval_y = self._get_eval_ds(load_eval_ds_fn)
+        eval_x, eval_y = self._get_eval_ds()
 
         eval_hooks = []
         if save_eval_map:
             eval_hooks.append(hooks.EvaluationMapSaverHook(
-                tensor_names=["labels", "predictions", "top_k_values", "top_k_indices"],
+                tensor_names=[
+                    "labels",
+                    "predictions",
+                    "top_k/indices",
+                    "top_k/values"
+                ],
             ))
         if log_tensors:
             eval_hooks.append(tf.train.LoggingTensorHook(
                 tensors={
-                    "probabilities": "softmax_tensor",
+                    "loss": "calc_loss/value",
                 },
-                every_n_iter=1,
+                every_n_iter=5,
             ))
 
         eval_input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": eval_x},
             y=eval_y,
+            num_epochs=1,
             batch_size=flags.eval_batch_size,
             shuffle=False,
         )
 
+        eval_steps = len(eval_y) // flags.eval_batch_size
+        if len(eval_y) % flags.eval_batch_size > 0:
+            eval_steps += 1
+
         start_time = time.time()
+
         result = self._estimator.evaluate(
             input_fn=eval_input_fn,
-            hooks=eval_hooks
+            steps=eval_steps,
+            hooks=eval_hooks,
         )
-        self.eval_results.append(result)
 
         duration = round(time.time() - start_time, 3)
         self.total_eval_duration += duration
 
-        print("Eval duration: " + self._duration_to_string(duration))
-        self.print_results_as_table(self._eval_columns, [result])
+        self.eval_results.append(result)
+        results_table = self.results_as_table_string(self._eval_columns, [result])
 
-    def predict(self, load_predict_ds_fn):
+        print(results_table)
+        print("Eval duration: " + self._duration_to_string(duration))
+
+    def predict(self):
         """Make predictions for given dataset"""
 
         flags = tf.app.flags.FLAGS
 
-        if not callable(load_predict_ds_fn):
-            raise ValueError("load_predict_ds_fn argument is not callable")
-
-        pred_x, pred_y = self._get_eval_ds(load_predict_ds_fn)
+        pred_x, pred_y = self._get_eval_ds()
 
         input_fn = tf.estimator.inputs.numpy_input_fn(
             x={"x": pred_x},
@@ -294,7 +320,7 @@ class Classifier(object):
         return res
 
     @staticmethod
-    def print_results_as_table(columns, data):
+    def results_as_table_string(columns, data):
         """Pretty print array of dictionaries as table by given columns"""
 
         total_len = 0
@@ -317,7 +343,7 @@ class Classifier(object):
                 res += "|"
                 res += col_string(data[f_key], " ", col_lens[f_key])
 
-            return res + "|"
+            return res + "|\n"
 
         def col_string(data, pad_symbol, pad_num):
             if type(data) is float or type(data) is np.float32:
@@ -333,18 +359,20 @@ class Classifier(object):
                 res += "+"
                 res += col_string("", "-", col_lens[f_key])
 
-            return res + "+"
+            return res + "+\n"
 
-        top_bottom_line = "+{:-<{}}+".format('', total_len + len(columns) - 1)
+        top_bottom_line = "+{:-<{}}+\n".format('', total_len + len(columns) - 1)
 
-        print(top_bottom_line)
-        print(row_string(columns_map))
+        result = top_bottom_line
+        result += row_string(columns_map)
 
         for res in data:
-            print(separator_string())
-            print(row_string(res))
+            result += separator_string()
+            result += row_string(res)
 
-        print(top_bottom_line)
+        result += top_bottom_line
+
+        return result
 
     @staticmethod
     def _print_ds_details(ds, ds_name="dataset"):
@@ -378,24 +406,24 @@ class Classifier(object):
 
         return output
 
-    def _get_eval_ds(self, load_fn):
+    def _get_eval_ds(self):
         """Lazy load evaluation dataset"""
 
         if self._eval_ds is None:
-            self._eval_ds = load_fn()
+            self._eval_ds = self.ds_module.load_eval_dataset()
             # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
             self._print_ds_loaded("Evaluation")
-            self.print_ds_details(self._eval_ds, "eval")
+            self._print_ds_details(self._eval_ds, "eval")
 
         return self._eval_ds
 
-    def _get_train_ds(self, load_fn):
+    def _get_train_ds(self):
         """Lazy load training dataset"""
 
         if self._train_ds is None:
-            self._train_ds = load_fn()
+            self._train_ds = self.ds_module.load_train_dataset()
             self._print_ds_loaded("Training")
-            self.print_ds_details(self._train_ds, "train")
+            self._print_ds_details(self._train_ds, "train")
 
         return self._train_ds
 
@@ -415,7 +443,7 @@ class Classifier(object):
         pp = pprint.PrettyPrinter(indent=2, compact=True)
 
         for name in self._estimator.get_variable_names():
-            if name.find("optimizer") != -1 or name in ["beta1_power", "beta2_power"]:
+            if name == "h" or name.find("optimizer") != -1 or name in ["beta1_power", "help", "beta2_power"]:
                 continue
 
             val = self._estimator.get_variable_value(name)
@@ -435,6 +463,8 @@ class Classifier(object):
             "total_eval_duration": self._duration_to_string(self.total_eval_duration),
         }
 
+        results_table = self.results_as_table_string(self._eval_columns, self.eval_results)
+
         file.save_pickle(
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.pkl")
@@ -443,8 +473,12 @@ class Classifier(object):
             model_stats_map,
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_result.json")
         )
+        file.save_txt(
+            results_table,
+            os.path.join(tf.app.flags.FLAGS.model_dir, "last_results_table.txt")
+        )
 
-        self.print_results_as_table(self._eval_columns, self.eval_results)
+        print(results_table)
         pp.pprint(model_stats_map)
         print("Total training duration: " + self._duration_to_string(self.total_train_duration))
         print("Total evaluation duration: " + self._duration_to_string(self.total_eval_duration))

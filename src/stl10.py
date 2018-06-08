@@ -16,7 +16,7 @@ def build_app_flags():
     """
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_dropout0.3",
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.3, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
@@ -170,22 +170,6 @@ def get_class_names():
     return class_names
 
 
-# def distort_features(features):
-# input_layer = tf.map_fn(
-#     fn=lambda x: tf.image.convert_image_dtype(x, tf.float32),
-#     elems=features["x"]
-# )
-# if mode == tf.estimator.ModeKeys.TRAIN:
-#     return tf.map_fn(
-#         fn=lambda img: image.randomly_distort_image(
-#             image=img,
-#             crop_shape=(72, 72, 3),
-#             target_size=96,
-#         ),
-#         elems=features["x"],
-#         parallel_iterations=128
-#     )
-
 def model_fn(features, labels, mode, params, config):
     """Model function that is build for classifying 96x96x3 images in 10 labels"""
 
@@ -195,9 +179,10 @@ def model_fn(features, labels, mode, params, config):
     with tf.name_scope("input_layer"):
         input_layer = features["x"]
 
+    # Convolution and pooling layers
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
-        filters=96,
+        filters=72,
         kernel_size=[7, 7],
         strides=2,
         padding="same",
@@ -215,7 +200,7 @@ def model_fn(features, labels, mode, params, config):
 
     conv2 = tf.layers.conv2d(
         inputs=pool1,
-        filters=128,
+        filters=96,
         kernel_size=[5, 5],
         strides=1,
         padding="same",
@@ -224,30 +209,24 @@ def model_fn(features, labels, mode, params, config):
     )
     pool2 = tf.layers.max_pooling2d(
         inputs=conv2,
-        pool_size=[2, 2],
+        pool_size=[3, 3],
         strides=2,
         name="pool2"
     )
 
     conv3 = tf.layers.conv2d(
         inputs=pool2,
-        filters=172,
+        filters=128,
         kernel_size=[3, 3],
         strides=1,
         padding="same",
         activation=tf.nn.relu,
         name="conv3"
     )
-    pool3 = tf.layers.max_pooling2d(
-        inputs=conv3,
-        pool_size=[2, 2],
-        strides=2,
-        name="pool3"
-    )
 
     conv4 = tf.layers.conv2d(
-        inputs=pool3,
-        filters=256,
+        inputs=conv3,
+        filters=128,
         kernel_size=[3, 3],
         strides=1,
         padding="same",
@@ -255,14 +234,41 @@ def model_fn(features, labels, mode, params, config):
         name="conv4"
     )
 
+    pool3 = tf.layers.max_pooling2d(
+        inputs=conv4,
+        pool_size=[3, 3],
+        strides=2,
+        name="pool3"
+    )
+
+    conv5 = tf.layers.conv2d(
+        inputs=pool3,
+        filters=172,
+        kernel_size=[3, 3],
+        strides=1,
+        padding="same",
+        activation=tf.nn.relu,
+        name="conv5"
+    )
+
+    conv6 = tf.layers.conv2d(
+        inputs=conv5,
+        filters=128,
+        kernel_size=[3, 3],
+        strides=1,
+        padding="same",
+        activation=tf.nn.relu,
+        name="conv6"
+    )
+
     # Flatten output of the last convolution
-    pool_flat = tf.reshape(
-        conv4, [-1, conv4.shape[1]*conv4.shape[2]*conv4.shape[3]], name="pool_flat")
+    flat = tf.reshape(
+        conv6, [-1, conv6.shape[1]*conv6.shape[2]*conv6.shape[3]], name="flat")
 
     # Dense Layers
     dense1 = tf.layers.dense(
-        inputs=pool_flat,
-        units=1024,
+        inputs=flat,
+        units=2048,
         activation=tf.nn.relu,
         name="dense1"
     )
@@ -276,13 +282,13 @@ def model_fn(features, labels, mode, params, config):
 
     dense3 = tf.layers.dense(
         inputs=dense2,
-        units=256,
+        units=128,
         activation=tf.nn.relu,
         name="dense3"
     )
 
     if params.get("add_layer_summaries", False) is True:
-        weighted_layers_names = ["conv1", "conv2", "conv3", "conv4", "dense1", "dense2", "dense3"]
+        weighted_layers_names = ["conv1", "conv2", "conv3", "conv4", "conv5", "conv6", "flat", "dense1", "dense2", "dense3"]
         for layer_name in weighted_layers_names:
             build_layer_summaries(layer_name)
 
@@ -298,9 +304,10 @@ def model_fn(features, labels, mode, params, config):
     argmax = tf.argmax(input=logits, axis=1, name="predictions", output_type=tf.int32)
     softmax = tf.nn.softmax(logits, name="softmax_tensor")
 
-    # top_k_values, top_k_indices = tf.nn.top_k(input=logits, k=2)
-    # tf.identity(top_k_values, "top_k_values")
-    # tf.identity(top_k_indices, "top_k_indices")
+    with tf.name_scope("top_k"):
+        top_k_values, top_k_indices = tf.nn.top_k(input=softmax, k=2)
+        tf.identity(top_k_values, "values")
+        tf.identity(top_k_indices, "indices")
 
     predictions = {
         "class": argmax,
@@ -325,7 +332,6 @@ def model_fn(features, labels, mode, params, config):
     loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="calc_loss")
     tf.summary.scalar("cross_entropy", loss)
 
-    # Configure the TrainingOp
     if mode == tf.estimator.ModeKeys.TRAIN:
 
         summary_saver_hook = tf.train.SummarySaverHook(
@@ -364,6 +370,7 @@ def model_fn(features, labels, mode, params, config):
         mode=mode,
         loss=loss,
         eval_metric_ops=eval_metric_ops,
+        evaluation_hooks=[]
     )
 
 
