@@ -240,7 +240,7 @@ class Classifier(object):
         self.total_eval_duration += duration
 
         self.eval_results.append(result)
-        results_table = self.results_as_table_string(self._eval_columns, [result])
+        results_table = self.format_results_as_table_string(self._eval_columns, [result])
 
         print(results_table)
         print("Eval duration: " + self._duration_to_string(duration))
@@ -320,8 +320,8 @@ class Classifier(object):
         return res
 
     @staticmethod
-    def results_as_table_string(columns, data):
-        """Pretty print array of dictionaries as table by given columns"""
+    def format_results_as_table_string(columns, data):
+        """Format array of dictionaries as table by given columns"""
 
         total_len = 0
         col_lens = {}
@@ -463,7 +463,7 @@ class Classifier(object):
             "total_eval_duration": self._duration_to_string(self.total_eval_duration),
         }
 
-        results_table = self.results_as_table_string(self._eval_columns, self.eval_results)
+        results_table = self.format_results_as_table_string(self._eval_columns, self.eval_results)
 
         file.save_pickle(
             model_stats_map,
