@@ -207,10 +207,12 @@ def model_fn(features, labels, mode, params, config):
         activation=tf.nn.relu,
         name="conv2"
     )
+
     pool2 = tf.layers.max_pooling2d(
         inputs=conv2,
         pool_size=[3, 3],
         strides=2,
+        padding="same",
         name="pool2"
     )
 
@@ -238,6 +240,7 @@ def model_fn(features, labels, mode, params, config):
         inputs=conv4,
         pool_size=[3, 3],
         strides=2,
+        padding="same",
         name="pool3"
     )
 
@@ -262,8 +265,9 @@ def model_fn(features, labels, mode, params, config):
     )
 
     # Flatten output of the last convolution
-    flat = tf.reshape(
-        conv6, [-1, conv6.shape[1]*conv6.shape[2]*conv6.shape[3]], name="flat")
+    with tf.name_scope("flat"):
+        flat = tf.reshape(
+            conv6, [-1, conv6.shape[1]*conv6.shape[2]*conv6.shape[3]])
 
     # Dense Layers
     dense1 = tf.layers.dense(
@@ -288,7 +292,12 @@ def model_fn(features, labels, mode, params, config):
     )
 
     if params.get("add_layer_summaries", False) is True:
-        weighted_layers_names = ["conv1", "conv2", "conv3", "conv4", "conv5", "conv6", "flat", "dense1", "dense2", "dense3"]
+        weighted_layers_names = [
+            "conv1", "conv2", "conv3",
+            "conv4", "conv5", "conv6",
+            "flat", "dense1", "dense2",
+            "dense3"
+        ]
         for layer_name in weighted_layers_names:
             build_layer_summaries(layer_name)
 
@@ -301,13 +310,11 @@ def model_fn(features, labels, mode, params, config):
 
 
     # Calculate predictions
-    argmax = tf.argmax(input=logits, axis=1, name="predictions", output_type=tf.int32)
-    softmax = tf.nn.softmax(logits, name="softmax_tensor")
+    with tf.name_scope("predictions"):
+        argmax = tf.argmax(input=logits, axis=1, output_type=tf.int32)
 
-    with tf.name_scope("top_k"):
-        top_k_values, top_k_indices = tf.nn.top_k(input=softmax, k=2)
-        tf.identity(top_k_values, "values")
-        tf.identity(top_k_indices, "indices")
+    with tf.name_scope("softmax"):
+        softmax = tf.nn.softmax(logits)
 
     predictions = {
         "class": argmax,
@@ -315,6 +322,11 @@ def model_fn(features, labels, mode, params, config):
     }
 
     if mode == tf.estimator.ModeKeys.PREDICT:
+        with tf.name_scope("top_k"):
+            top_k_values, top_k_indices = tf.nn.top_k(input=softmax, k=2)
+            tf.identity(top_k_values, "values")
+            tf.identity(top_k_indices, "indices")
+
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions,
@@ -329,7 +341,7 @@ def model_fn(features, labels, mode, params, config):
     labels = tf.identity(labels, name="labels")
 
     # Calculate Loss
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="calc_loss")
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="loss")
     tf.summary.scalar("cross_entropy", loss)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -361,10 +373,18 @@ def model_fn(features, labels, mode, params, config):
             training_hooks=[summary_saver_hook]
         )
 
+    with tf.name_scope("accuracy"):
+        accuracy = tf.metrics.accuracy(labels=labels, predictions=predictions["class"])
+
     # Add evaluation metrics
     eval_metric_ops = {
-        "accuracy": tf.metrics.accuracy(labels=labels, predictions=predictions["class"])
+        "accuracy": accuracy
     }
+
+    with tf.name_scope("top_k"):
+        top_k_values, top_k_indices = tf.nn.top_k(input=softmax, k=2)
+        tf.identity(top_k_values, "values")
+        tf.identity(top_k_indices, "indices")
 
     return tf.estimator.EstimatorSpec(
         mode=mode,

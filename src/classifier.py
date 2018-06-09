@@ -203,7 +203,7 @@ class Classifier(object):
             eval_hooks.append(hooks.EvaluationMapSaverHook(
                 tensor_names=[
                     "labels",
-                    "predictions",
+                    "predictions/ArgMax",
                     "top_k/indices",
                     "top_k/values"
                 ],
@@ -211,7 +211,7 @@ class Classifier(object):
         if log_tensors:
             eval_hooks.append(tf.train.LoggingTensorHook(
                 tensors={
-                    "loss": "calc_loss/value",
+                    "loss": "loss/value",
                 },
                 every_n_iter=5,
             ))
@@ -262,12 +262,12 @@ class Classifier(object):
         pred_generator = self._estimator.predict(input_fn=input_fn)
 
         for idx, res in enumerate(pred_generator):
-            print(res)
             prediction_class = self._index_to_class_name(res["class"])
             probability = res["probabilities"][res["class"]]*100
-            actual_class_name = self._index_to_class_name(pred_y)
+            actual_class_name = self._index_to_class_name(pred_y[idx])
 
-            print("Prediction: %s(%.2f%%), actual class %s" % (prediction_class, probability,  actual_class_name))
+            print("Prediction for index: %d - %s(%.2f%%), actual class %s" %
+                  (idx, prediction_class, probability,  actual_class_name))
 
     def predict_image_label(self, image_location, expected_label):
         """Make prediction for single image from given location"""
