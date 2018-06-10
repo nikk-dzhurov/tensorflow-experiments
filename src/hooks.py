@@ -12,19 +12,16 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
     It extends tf.train.SessionRunHook to access tensors in the current session
     """
 
-    def __init__(self, tensor_names=None, file_name="eval_map.pkl"):
+    def __init__(self, tensor_names=None):
         """Initialize/Construct EvaluationMapSaverHook object"""
 
         if tensor_names is None or len(tensor_names) == 0:
             raise ValueError("tensor_names should has at least 1 element")
-        if type(file_name) is not str or file_name == "":
-            raise ValueError("file_location should be valid string")
 
         self._iter_count = None
         self._tensors = None
         self._should_trigger = False
         self._results = {}
-        self._file_name = file_name
         self._tensor_names = tensor_names
         self._timer = tf.train.SecondOrStepTimer(every_steps=1)
 
@@ -43,18 +40,26 @@ class EvaluationMapSaverHook(tf.train.SessionRunHook):
     def after_run(self, run_context, run_values):  # pylint: disable=unused-argument
         if self._should_trigger:
             for idx, t_name in enumerate(self._tensor_names):
+                value = run_values.results[idx]
+
+                if type(value) is np.ndarray:
+                    value = value.tolist()
+
                 if self._results.get(t_name, None) is None:
-                    self._results[t_name] = run_values.results[idx]
+                    self._results[t_name] = value
                 else:
-                    self._results[t_name] = np.concatenate([
-                        self._results[t_name], run_values.results[idx]], axis=0)
+                    self._results[t_name] = self._results[t_name] + value
 
         self._iter_count += 1
 
     def end(self, session):
         file.save_pickle(
             self._results,
-            os.path.join(tf.app.flags.FLAGS.model_dir, self._file_name)
+            os.path.join(tf.app.flags.FLAGS.model_dir, "eval_map.pkl")
+        )
+        file.save_json(
+            self._results,
+            os.path.join(tf.app.flags.FLAGS.model_dir, "eval_map.json")
         )
 
 
