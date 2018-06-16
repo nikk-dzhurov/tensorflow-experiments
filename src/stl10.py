@@ -16,9 +16,9 @@ def build_app_flags():
     """
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_dropout0.3",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_dropout0.7",
                                "Model checkpoint/training/evaluation data directory")
-    tf.app.flags.DEFINE_float("dropout_rate", 0.3, "Dropout rate for model training")
+    tf.app.flags.DEFINE_float("dropout_rate", 0.7, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
     tf.app.flags.DEFINE_integer("train_batch_size", 64, "Training data batch size")
 
@@ -86,7 +86,7 @@ def build_layer_summaries(layer_name):
 def get_model_params():
     """This function returns required model params"""
 
-    return {"add_layer_summaries": False}
+    return {"add_layer_summaries": True}
 
 
 def load_train_dataset():
