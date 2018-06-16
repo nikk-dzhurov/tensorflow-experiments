@@ -269,14 +269,14 @@ class Classifier(object):
             print("Prediction for index: %d - %s(%.2f%%), actual class %s" %
                   (idx, prediction_class, probability,  actual_class_name))
 
-    def predict_image_label(self, image_location, expected_label):
+    def predict_image_label(self, image_location):
         """Make prediction for single image from given location"""
 
         app_flags = tf.app.flags.FLAGS
         if type(image_location) is not str or image_location == "":
             raise ValueError("Specify valid image location")
-        if type(expected_label) is not str or expected_label == "":
-            raise ValueError("Specify valid value for actual_label")
+        # if type(expected_label) is not str or expected_label == "":
+        #     raise ValueError("Specify valid value for actual_label")
 
         img = Image.open(image_location).convert('RGB')
         if img.width != app_flags.image_width or img.height != app_flags.image_height:
@@ -299,7 +299,7 @@ class Classifier(object):
             prediction_class = self._index_to_class_name(res["class"])
             probability = res["probabilities"][res["class"]]*100
 
-            print("Prediction: %s(%.2f%%), expected label %s" % (prediction_class, probability,  expected_label))
+            print("Prediction: %s(%.2f%%)" % (prediction_class, probability))
             # print(tf.Session().run(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=res["logits"])))
 
         # LabeledImage(img, "bird", max_value=255).save()

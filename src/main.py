@@ -97,10 +97,7 @@ def main(argv):
         classifier.eval()
     elif args.mode == PREDICT_MODE:
         if type(args.image_file) is str and args.image_file != "":
-            classifier.predict_image_label(
-                image_location="../test_images/plane2.jpg",
-                expected_label="airplane"
-            )
+            classifier.predict_image_label(image_location=args.image_file)
         else:
             classifier.predict()
     else:
