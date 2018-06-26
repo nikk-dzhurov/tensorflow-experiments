@@ -130,7 +130,7 @@ class Classifier(object):
             log_step_count_steps=100,
             save_summary_steps=100,
             save_checkpoints_steps=1000,
-            keep_checkpoint_max=30,
+            keep_checkpoint_max=10,
         )
 
     def export_model(self):

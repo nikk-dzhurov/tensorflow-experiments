@@ -69,7 +69,7 @@ def main(argv):
 
     if args.mode == TRAIN_EVAL_MODE or args.mode == TRAIN_MODE:
         clean_dir = False
-        train_epochs = 10
+        train_epochs = 2
         train_steps = 1000
         if type(args.steps) is int and 1 <= args.steps <= 10000:
             train_steps = args.steps

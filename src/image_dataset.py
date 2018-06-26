@@ -3,7 +3,6 @@ import random
 import numpy as np
 import tensorflow as tf
 
-import image
 import file
 
 RANDOM_SEED = 55355
