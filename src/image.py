@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from PIL import Image
-import tensorflow as tf
 
 from image_dataset import ImageDataset
 

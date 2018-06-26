@@ -184,7 +184,7 @@ class Classifier(object):
             self.total_train_duration += duration
 
             print("Training duration: " + self._duration_to_string(duration))
-            print("Training epoch {} of {} completed".format(i+1, epochs))
+            print("Training epoch {} of {} completed".format(i + 1, epochs))
 
             if eval_after_each_epoch:
                 self.eval(save_eval_map=False)
@@ -263,11 +263,11 @@ class Classifier(object):
 
         for idx, res in enumerate(pred_generator):
             prediction_class = self._index_to_class_name(res["class"])
-            probability = res["probabilities"][res["class"]]*100
+            probability = res["probabilities"][res["class"]] * 100
             actual_class_name = self._index_to_class_name(pred_y[idx])
 
             print("Prediction for index: %d - %s(%.2f%%), actual class %s" %
-                  (idx, prediction_class, probability,  actual_class_name))
+                  (idx, prediction_class, probability, actual_class_name))
 
     def predict_image_label(self, image_location):
         """Make prediction for single image from given location"""
@@ -275,8 +275,6 @@ class Classifier(object):
         app_flags = tf.app.flags.FLAGS
         if type(image_location) is not str or image_location == "":
             raise ValueError("Specify valid image location")
-        # if type(expected_label) is not str or expected_label == "":
-        #     raise ValueError("Specify valid value for actual_label")
 
         img = Image.open(image_location).convert('RGB')
         if img.width != app_flags.image_width or img.height != app_flags.image_height:
@@ -297,14 +295,9 @@ class Classifier(object):
         for res in pred_generator:
             print(res)
             prediction_class = self._index_to_class_name(res["class"])
-            probability = res["probabilities"][res["class"]]*100
+            probability = res["probabilities"][res["class"]] * 100
 
             print("Prediction: %s(%.2f%%)" % (prediction_class, probability))
-            # print(tf.Session().run(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=res["logits"])))
-
-        # LabeledImage(img, "bird", max_value=255).save()
-        # print(img.shape)
-        # pass
 
     def get_final_eval_result(self):
         """Get last result from evaluation results and make it JSON serializable"""

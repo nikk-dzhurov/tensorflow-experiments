@@ -3,7 +3,6 @@ import numpy as np
 import tensorflow as tf
 
 import file
-from image import LabeledImage
 
 
 class EvaluationMapSaverHook(tf.train.SessionRunHook):

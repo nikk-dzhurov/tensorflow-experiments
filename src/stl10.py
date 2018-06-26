@@ -3,7 +3,6 @@ import tensorflow as tf
 from random import randint
 
 import file
-import image
 import image_dataset as img_ds
 from image import LabeledImage
 from image_dataset import ImageDataset
@@ -267,7 +266,7 @@ def model_fn(features, labels, mode, params, config):
     # Flatten output of the last convolution
     with tf.name_scope("flat"):
         flat = tf.reshape(
-            conv6, [-1, conv6.shape[1]*conv6.shape[2]*conv6.shape[3]])
+            conv6, [-1, conv6.shape[1] * conv6.shape[2] * conv6.shape[3]])
 
     # Dense Layers
     dense1 = tf.layers.dense(
@@ -308,7 +307,6 @@ def model_fn(features, labels, mode, params, config):
     # Logits Layer
     logits = tf.layers.dense(inputs=dropout, units=10, name="logits")
 
-
     # Calculate predictions
     with tf.name_scope("predictions"):
         argmax = tf.argmax(input=logits, axis=1, output_type=tf.int32)
@@ -345,17 +343,11 @@ def model_fn(features, labels, mode, params, config):
     tf.summary.scalar("cross_entropy", loss)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-
         summary_saver_hook = tf.train.SummarySaverHook(
             save_steps=100,
             output_dir=config.model_dir + "/train",
             summary_op=tf.summary.merge_all()
         )
-
-        # Gradient Descent Optimizer configuration with learning rate decay
-        # learning_rate = common.get_learning_rate_from_flags(tf.app.flags.FLAGS)
-        # optimizer = tf.train.GradientDescentOptimizer(
-        #     learning_rate=learning_rate, name="gradient_descent_optimizer")
 
         optimizer = tf.train.AdamOptimizer(
             learning_rate=tf.app.flags.FLAGS.initial_learning_rate,
@@ -414,7 +406,7 @@ def save_ds_samples():
         idx = randint(0, items_per_pickle - 1)
         for j in range(len(pickles)):
             images.append(
-                LabeledImage.load_from_dataset(dataset, index=j*items_per_pickle+idx, max_value=1),
+                LabeledImage.load_from_dataset(dataset, index=j * items_per_pickle + idx, max_value=1),
             )
         LabeledImage(np.concatenate([x.image for x in images], axis=1), images[0].name) \
             .save(location="../samples/", name="{}_{}".format(idx, images[0].name))
@@ -429,7 +421,6 @@ def extend_original_data():
         classes_count=10,
         images=np.concatenate([train[0], test[0]], axis=0),
         labels=np.concatenate([train[1], test[1]], axis=0),
-        # test_items_fraction=0.25,
         test_items_per_class=200,
     )
 

@@ -81,16 +81,16 @@ class ImageDataset(object):
         """Build another ImageDataset by distorting the images"""
 
         return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
-             tf.map_fn(
-                 fn=lambda img: self._randomly_distort_image(
-                     image=img,
-                     crop_shape=crop_shape,
-                     target_size=target_size,
-                     seed=seed
-                 ),
-                 elems=batch,
-                 parallel_iterations=parallel_iter
-             )
+            tf.map_fn(
+                fn=lambda img: self._randomly_distort_image(
+                    image=img,
+                    crop_shape=crop_shape,
+                    target_size=target_size,
+                    seed=seed
+                ),
+                elems=batch,
+                parallel_iterations=parallel_iter
+            )
         ))
 
     def _distort_on_batches(self, dist_fn):
@@ -155,7 +155,7 @@ def split_dataset(images, labels, classes_count,
     count_per_class = np.zeros(classes_count, int)
 
     if test_items_per_class is None:
-        test_items_per_class = int(labels.shape[0]*test_items_fraction/10)
+        test_items_per_class = int(labels.shape[0] * test_items_fraction / 10)
 
     zipped_ds = _zip_ds_pairs(images, labels)
 
@@ -223,7 +223,7 @@ def improve_dataset(train, test, dataset_name, crop_shape,
     if rand_dist_sets >= 1:
         for i in range(rand_dist_sets):
             train_ds.randomly_distort_images(
-                seed=seed+i, crop_shape=crop_shape, target_size=target_size)\
+                seed=seed + i, crop_shape=crop_shape, target_size=target_size) \
                 .save_to_pickle(
                 os.path.join(save_location, "rand_distorted_train_%d.pkl" % i))
 

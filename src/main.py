@@ -5,7 +5,6 @@ import tensorflow as tf
 import stl10
 from classifier import Classifier
 
-
 EVAL_MODE = "eval"
 TRAIN_MODE = "train"
 PREDICT_MODE = "predict"
