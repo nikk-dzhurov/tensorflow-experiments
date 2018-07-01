@@ -15,7 +15,7 @@ def build_app_flags():
     """
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/adamOp_dropout0.7",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/cpu_i5_4590",
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.7, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
@@ -30,7 +30,7 @@ def build_app_flags():
     tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 2000, "Learning rate decay steps")
 
     # GPU flags
-    tf.app.flags.DEFINE_bool("ignore_gpu", False,
+    tf.app.flags.DEFINE_bool("ignore_gpu", True,
                              "Flag that determines if gpu should be disabled")
     tf.app.flags.DEFINE_float("per_process_gpu_memory_fraction", 1.0,
                               "Fraction of gpu memory to be used")

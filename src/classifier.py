@@ -171,6 +171,13 @@ class Classifier(object):
             shuffle=True
         )
 
+        profiler_hook = tf.train.ProfilerHook(
+            save_steps=999,
+            output_dir=flags.model_dir,
+            show_dataflow=True,
+            show_memory=True
+        )
+
         print("Train {}x{} steps".format(epochs, steps))
 
         for i in range(epochs):
@@ -178,7 +185,7 @@ class Classifier(object):
             self._estimator.train(
                 input_fn=train_input_fn,
                 steps=steps,
-                hooks=[]
+                hooks=[profiler_hook]
             )
             duration = round(time.time() - start_time, 3)
             self.total_train_duration += duration
