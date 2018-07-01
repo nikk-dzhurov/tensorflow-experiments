@@ -9,6 +9,7 @@ nvidia-docker build -t local-tf docker
 nvidia-docker run -d \
 	--user 1000 \
 	-p 8888:8888 \
+	-p 3000:3000 \
 	-p 0.0.0.0:6006:6006 \
 	--name tf_gpu \
 	-v "$(pwd)/src":"/app" \

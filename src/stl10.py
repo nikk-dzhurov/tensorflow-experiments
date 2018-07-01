@@ -15,7 +15,7 @@ def build_app_flags():
     """
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/cpu_i5_4590",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/cpu_i5_4690",
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.7, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")

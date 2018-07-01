@@ -1,3 +1,4 @@
+import io
 import os
 import time
 import pprint
@@ -305,6 +306,47 @@ class Classifier(object):
             probability = res["probabilities"][res["class"]] * 100
 
             print("Prediction: %s(%.2f%%)" % (prediction_class, probability))
+
+    def predict_image_label_bytes(self, img_bytes):
+        """Make prediction for single image(as byte array)"""
+
+        app_flags = tf.app.flags.FLAGS
+
+        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        if img.width != app_flags.image_width or img.height != app_flags.image_height:
+            raise ValueError("Please provide image with dimensions: {}x{}"
+                             .format(app_flags.image_width, app_flags.image_height))
+
+        images = image_dataset.prepare_images([np.array(img)])
+
+        input_fn = tf.estimator.inputs.numpy_input_fn(
+            x={"x": images},
+            y=None,
+            batch_size=1,
+            shuffle=False
+        )
+
+        results = []
+
+        pred_generator = self._estimator.predict(input_fn=input_fn)
+        for res in pred_generator:
+            print(res)
+
+            tmp = {
+                "prediction": self._index_to_class_name(res["class"]),
+                "probability": "%.2f%%" % (res["probabilities"][res["class"]] * 100),
+                "all": []
+            }
+
+            for key, val in enumerate(res["probabilities"]):
+                tmp["all"].append({
+                    "class": self._index_to_class_name(key),
+                    "probability": "%.2f%%" % (val * 100)
+                })
+
+            results.append(tmp)
+
+        return results
 
     def get_final_eval_result(self):
         """Get last result from evaluation results and make it JSON serializable"""

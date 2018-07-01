@@ -1,12 +1,14 @@
 import sys
 import argparse
 import tensorflow as tf
+from flask import Flask, jsonify, request
 
 import stl10
 from classifier import Classifier
 
 EVAL_MODE = "eval"
 TRAIN_MODE = "train"
+SERVER_MODE = "server"
 PREDICT_MODE = "predict"
 TRAIN_EVAL_MODE = "train_eval"
 PREPARE_DATA_MODE = "prepare_data"
@@ -99,6 +101,24 @@ def main(argv):
             classifier.predict_image_label(image_location=args.image_file)
         else:
             classifier.predict()
+    elif args.mode == SERVER_MODE:
+        serv = Flask(__name__)
+
+        @serv.route('/predict', methods=['POST'])
+        def predict():
+            try:
+                result = classifier.predict_image_label_bytes(request.data)
+                return jsonify(result), 200
+            except Exception:
+                return jsonify({
+                    "error": "Invalid image"
+                }), 400
+
+        @serv.route('/ping', methods=['GET'])
+        def ping():
+            return "OK"
+
+        serv.run(host='0.0.0.0', port=3000)
     else:
         print("Model mode \"{}\" is not supported".format(args.mode))
         sys.exit(1)
