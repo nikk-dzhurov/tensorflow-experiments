@@ -1,0 +1,20 @@
+# cd src/
+
+# train_eval mode (it's default)
+python main.py
+
+# train mode
+python main.py --mode="train"
+
+# eval mode
+python main.py --mode="eval"
+
+# predict over evaluation dataset
+python main.py --mode="predict"
+
+# predict single image
+python main.py --mode="predict" --image_file="../test_images/plane2.jpg"
+
+# extra mode server
+python main.py --mode="server" --port=3000
+

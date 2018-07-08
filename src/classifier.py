@@ -179,7 +179,7 @@ class Classifier(object):
             show_memory=True
         )
 
-        print("Train {}x{} steps".format(epochs, steps))
+        self.print("Train {}x{} steps".format(epochs, steps))
 
         for i in range(epochs):
             start_time = time.time()
@@ -191,8 +191,8 @@ class Classifier(object):
             duration = round(time.time() - start_time, 3)
             self.total_train_duration += duration
 
-            print("Training duration: " + self._duration_to_string(duration))
-            print("Training epoch {} of {} completed".format(i + 1, epochs))
+            self.print("Training duration: " + self._duration_to_string(duration))
+            self.print("Training epoch {} of {} completed".format(i + 1, epochs))
 
             if eval_after_each_epoch:
                 self.eval(save_eval_map=False)
@@ -250,8 +250,8 @@ class Classifier(object):
         self.eval_results.append(result)
         results_table = self.format_results_as_table_string(self._eval_columns, [result])
 
-        print(results_table)
-        print("Eval duration: " + self._duration_to_string(duration))
+        self.print(results_table)
+        self.print("Eval duration: " + self._duration_to_string(duration))
 
     def predict(self):
         """Make predictions for given dataset"""
@@ -274,7 +274,7 @@ class Classifier(object):
             probability = res["probabilities"][res["class"]] * 100
             actual_class_name = self._index_to_class_name(pred_y[idx])
 
-            print("Prediction for index: %d - %s(%.2f%%), actual class %s" %
+            self.print("Prediction for index: %d - %s(%.2f%%), actual class %s" %
                   (idx, prediction_class, probability, actual_class_name))
 
     def predict_image_label(self, image_location):
@@ -301,11 +301,11 @@ class Classifier(object):
         pred_generator = self._estimator.predict(input_fn=input_fn)
 
         for res in pred_generator:
-            print(res)
+            # self.print(res)
             prediction_class = self._index_to_class_name(res["class"])
             probability = res["probabilities"][res["class"]] * 100
 
-            print("Prediction: %s(%.2f%%)" % (prediction_class, probability))
+            self.print("Prediction: %s(%.2f%%)" % (prediction_class, probability))
 
     def predict_image_label_bytes(self, img_bytes):
         """Make prediction for single image(as byte array)"""
@@ -330,8 +330,7 @@ class Classifier(object):
 
         pred_generator = self._estimator.predict(input_fn=input_fn)
         for res in pred_generator:
-            print(res)
-
+            # self.print(res)
             tmp = {
                 "prediction": self._index_to_class_name(res["class"]),
                 "probability": "%.2f%%" % (res["probabilities"][res["class"]] * 100),
@@ -416,16 +415,14 @@ class Classifier(object):
 
         return result
 
-    @staticmethod
-    def _print_ds_details(ds, ds_name="dataset"):
+    def _print_ds_details(self, ds, ds_name="dataset"):
         """Pretty print dataset details"""
 
-        print("{}_x:\n\t shape: {}\n\t type: {}".format(ds_name, ds[0].shape, ds[0].dtype))
-        print("{}_y:\n\t shape: {}\n\t type: {}".format(ds_name, ds[1].shape, ds[1].dtype))
+        self.print("{}_x:\n\t shape: {}\n\t type: {}".format(ds_name, ds[0].shape, ds[0].dtype))
+        self.print("{}_y:\n\t shape: {}\n\t type: {}".format(ds_name, ds[1].shape, ds[1].dtype))
 
-    @staticmethod
-    def _print_ds_loaded(name):
-        print("{} dataset loaded successfully!".format(name))
+    def _print_ds_loaded(self, name):
+        self.print("{} dataset loaded successfully!".format(name))
 
     @staticmethod
     def _duration_to_string(dur_in_sec=0):
@@ -453,7 +450,10 @@ class Classifier(object):
 
         if self._eval_ds is None:
             self._eval_ds = self.ds_module.load_eval_dataset()
-            # self._eval_ds = (self._eval_ds[0][0:10], self._eval_ds[1][0:10])  # Useful for development
+            # Useful for development
+            if tf.app.flags.FLAGS.model_dir[-5:] == "/test":
+                self._eval_ds = (self._eval_ds[0][0:100], self._eval_ds[1][0:100])
+
             self._print_ds_loaded("Evaluation")
             self._print_ds_details(self._eval_ds, "eval")
 
@@ -520,7 +520,10 @@ class Classifier(object):
             os.path.join(tf.app.flags.FLAGS.model_dir, "last_results_table.txt")
         )
 
-        print(results_table)
+        self.print(results_table)
         pp.pprint(model_stats_map)
-        print("Total training duration: " + self._duration_to_string(self.total_train_duration))
-        print("Total evaluation duration: " + self._duration_to_string(self.total_eval_duration))
+        self.print("Total training duration: " + self._duration_to_string(self.total_train_duration))
+        self.print("Total evaluation duration: " + self._duration_to_string(self.total_eval_duration))
+
+    def print(self, msg, level=tf.logging.INFO):
+        tf.logging.info("\n" + msg)

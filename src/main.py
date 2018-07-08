@@ -49,6 +49,12 @@ def parse_known_args(argv):
         default=0,
         help="Set training steps per epoch"
     )
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=3000,
+        help="Set server port"
+    )
 
     parsed_args, _ = parser.parse_known_args(argv)
 
@@ -71,8 +77,8 @@ def main(argv):
 
     if args.mode == TRAIN_EVAL_MODE or args.mode == TRAIN_MODE:
         clean_dir = False
-        train_epochs = 1
-        train_steps = 1001
+        train_epochs = 3
+        train_steps = 20
         if type(args.steps) is int and 1 <= args.steps <= 10000:
             train_steps = args.steps
         if type(args.epochs) is int and 1 <= args.epochs <= 100:
@@ -118,7 +124,11 @@ def main(argv):
         def ping():
             return "OK"
 
-        serv.run(host='0.0.0.0', port=3000)
+        port = 3000
+        if 1024 < args.port < 32768:
+            port = args.port
+
+        serv.run(host='0.0.0.0', port=port)
     else:
         print("Model mode \"{}\" is not supported".format(args.mode))
         sys.exit(1)
