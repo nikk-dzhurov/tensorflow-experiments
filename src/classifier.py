@@ -525,5 +525,5 @@ class Classifier(object):
         self.print("Total training duration: " + self._duration_to_string(self.total_train_duration))
         self.print("Total evaluation duration: " + self._duration_to_string(self.total_eval_duration))
 
-    def print(self, msg, level=tf.logging.INFO):
-        tf.logging.info("\n" + msg)
+    def print(self, msg):
+        tf.compat.v1.logging.info("\n" + msg)

@@ -61,7 +61,7 @@ class ImageDataset(object):
     def mirror_images(self):
         """Build another ImageDataset by mirroring the images"""
 
-        return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
+        return self._distort_on_batches(lambda batch, parallel_iter: tf.compat.v1.Session().run(
             tf.map_fn(
                 fn=lambda img: tf.image.flip_left_right(img),
                 elems=batch,
@@ -72,14 +72,14 @@ class ImageDataset(object):
     def rot90_images(self, n_times=1):
         """Build another ImageDataset by rotating the images by 90 degrees, N times"""
 
-        return self._distort_on_batches(lambda batch, _: tf.Session().run(
+        return self._distort_on_batches(lambda batch, _: tf.compat.v1.Session().run(
             tf.image.rot90(batch, k=n_times)
         ))
 
     def randomly_distort_images(self, crop_shape, target_size, seed=None):
         """Build another ImageDataset by distorting the images"""
 
-        return self._distort_on_batches(lambda batch, parallel_iter: tf.Session().run(
+        return self._distort_on_batches(lambda batch, parallel_iter: tf.compat.v1.Session.run(
             tf.map_fn(
                 fn=lambda img: self._randomly_distort_image(
                     image=img,
@@ -129,7 +129,7 @@ class ImageDataset(object):
     def _randomly_distort_image(image, crop_shape, target_size, seed=None):
         """
         Distort image by random factor
-        This function should be used inside tf.Session
+        This function should be used inside tf.compat.v1.Session
         """
 
         dist = tf.random_crop(image, crop_shape, seed=seed)
