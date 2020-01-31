@@ -1,13 +1,14 @@
 #!/bin/bash
 
-nvidia-docker kill tf_gpu
-nvidia-docker rm tf_gpu
+docker kill tf_gpu
+docker rm tf_gpu
 
 set -e
 
-nvidia-docker build -t local-tf docker
-nvidia-docker run -d \
-	--user 1000 \
+docker build -t local-tf docker
+docker run -d \
+	--gpus all \
+	--user=1000:1000 \
 	-p 8888:8888 \
 	-p 3000:3000 \
 	-p 0.0.0.0:6006:6006 \

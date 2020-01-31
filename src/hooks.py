@@ -5,7 +5,7 @@ import tensorflow as tf
 import file
 
 
-class EvaluationMapSaverHook(tf.train.SessionRunHook):
+class EvaluationMapSaverHook(tf.estimator.SessionRunHook):
     """
     EvaluationMapSaverHook class for extracting evaluation tensors
     It extends tf.train.SessionRunHook to access tensors in the current session

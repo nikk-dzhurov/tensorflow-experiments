@@ -10,9 +10,9 @@ import tensorflow as tf
 def clean_dir(dir_name):
     """Clean directory's content"""
 
-    if tf.gfile.Exists(dir_name):
-        tf.gfile.DeleteRecursively(dir_name)
-    tf.gfile.MakeDirs(dir_name)
+    if tf.io.gfile.exists(dir_name):
+        tf.io.gfile.rmtree(dir_name)
+    tf.io.gfile.makedirs(dir_name)
 
 
 def save_json(data, filename):

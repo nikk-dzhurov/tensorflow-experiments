@@ -56,7 +56,7 @@ def parse_known_args(argv):
 
 
 def main(argv):
-    tf.logging.set_verbosity(tf.logging.INFO)
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
 
     args = parse_known_args(argv)
     print("Execute the application with arguments: ", args)
@@ -125,4 +125,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    tf.app.run(main=main, argv=sys.argv)
+    tf.compat.v1.app.run(main=main, argv=sys.argv)

@@ -117,18 +117,18 @@ class Classifier(object):
         """Build tf.estimator.RunConfig object from application flags"""
 
         flags = tf.app.flags.FLAGS
-        sess_config = tf.ConfigProto()
+        sess_config = tf.compat.v1.ConfigProto()
 
         if flags.ignore_gpu:
-            sess_config = tf.ConfigProto(device_count={'GPU': 0})
+            sess_config = tf.compat.v1.ConfigProto(device_count={'GPU': 0})
         elif flags.per_process_gpu_memory_fraction != 1.0:
             gpu_options = tf.GPUOptions(
                 per_process_gpu_memory_fraction=flags.per_process_gpu_memory_fraction)
-            sess_config = tf.ConfigProto(gpu_options=gpu_options)
+            sess_config = tf.compat.v1.ConfigProto(gpu_options=gpu_options)
 
         return tf.estimator.RunConfig(
             session_config=sess_config,
-            log_step_count_steps=100,
+            log_step_count_steps=500,
             save_summary_steps=100,
             save_checkpoints_steps=1000,
             keep_checkpoint_max=10,
@@ -164,7 +164,7 @@ class Classifier(object):
 
         train_x, train_y = self._get_train_ds()
 
-        train_input_fn = tf.estimator.inputs.numpy_input_fn(
+        train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
             x={"x": train_x},
             y=train_y,
             batch_size=flags.train_batch_size,
@@ -172,7 +172,7 @@ class Classifier(object):
             shuffle=True
         )
 
-        profiler_hook = tf.train.ProfilerHook(
+        profiler_hook = tf.estimator.ProfilerHook(
             save_steps=999,
             output_dir=flags.model_dir,
             show_dataflow=True,
@@ -224,7 +224,7 @@ class Classifier(object):
                 every_n_iter=5,
             ))
 
-        eval_input_fn = tf.estimator.inputs.numpy_input_fn(
+        eval_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
             x={"x": eval_x},
             y=eval_y,
             num_epochs=1,
@@ -260,7 +260,7 @@ class Classifier(object):
 
         pred_x, pred_y = self._get_eval_ds()
 
-        input_fn = tf.estimator.inputs.numpy_input_fn(
+        input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
             x={"x": pred_x},
             y=pred_y,
             batch_size=flags.eval_batch_size,
@@ -291,7 +291,7 @@ class Classifier(object):
 
         images = image_dataset.prepare_images([np.array(img)])
 
-        input_fn = tf.estimator.inputs.numpy_input_fn(
+        input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
             x={"x": images},
             y=None,
             batch_size=1,
@@ -319,7 +319,7 @@ class Classifier(object):
 
         images = image_dataset.prepare_images([np.array(img)])
 
-        input_fn = tf.estimator.inputs.numpy_input_fn(
+        input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
             x={"x": images},
             y=None,
             batch_size=1,

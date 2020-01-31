@@ -26,7 +26,7 @@ class ImageDataset(object):
         self.y = labels
 
         self.DIST_BATCH_SIZE = 2000
-        self.PARALLEL_ITERATIONS = 100
+        self.PARALLEL_ITERATIONS = 150
 
     @staticmethod
     def load_from_pickles(pickle_locations):
@@ -202,6 +202,8 @@ def improve_dataset(train, test, dataset_name, crop_shape,
     # save original dataset to pickle file
     test_ds.save_to_pickle(
         os.path.join(save_location, "original_test.pkl"))
+    del test_ds
+
     train_ds.save_to_pickle(
         os.path.join(save_location, "original_train.pkl"))
 

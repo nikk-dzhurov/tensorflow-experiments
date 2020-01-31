@@ -15,7 +15,7 @@ def build_app_flags():
     """
 
     # General flags
-    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/cpu_i5_4690",
+    tf.app.flags.DEFINE_string("model_dir", "../models/stl10/960GTX",
                                "Model checkpoint/training/evaluation data directory")
     tf.app.flags.DEFINE_float("dropout_rate", 0.7, "Dropout rate for model training")
     tf.app.flags.DEFINE_integer("eval_batch_size", 64, "Evaluation data batch size")
@@ -30,7 +30,7 @@ def build_app_flags():
     tf.app.flags.DEFINE_integer("learning_rate_decay_steps", 2000, "Learning rate decay steps")
 
     # GPU flags
-    tf.app.flags.DEFINE_bool("ignore_gpu", True,
+    tf.app.flags.DEFINE_bool("ignore_gpu", False,
                              "Flag that determines if gpu should be disabled")
     tf.app.flags.DEFINE_float("per_process_gpu_memory_fraction", 1.0,
                               "Fraction of gpu memory to be used")
@@ -52,7 +52,7 @@ def get_learning_rate_from_flags(flags):
     else:
         learning_rate = tf.train.exponential_decay(
             learning_rate=flags.initial_learning_rate,
-            global_step=tf.train.get_global_step(),
+            global_step=tf.compat.v1.train.get_global_step(),
             decay_steps=flags.learning_rate_decay_steps,
             decay_rate=flags.learning_rate_decay_rate,
             name="learning_rate"
@@ -66,19 +66,19 @@ def variable_summaries(var):
 
     with tf.name_scope(var.name.replace(":", "_")):
         mean = tf.reduce_mean(var)
-        tf.summary.scalar('mean', mean)
+        tf.compat.v1.summary.scalar('mean', mean)
         with tf.name_scope('stddev'):
             stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-        tf.summary.scalar('stddev', stddev)
-        tf.summary.scalar('max', tf.reduce_max(var))
-        tf.summary.scalar('min', tf.reduce_min(var))
-        tf.summary.histogram('histogram', var)
+        tf.compat.v1.summary.scalar('stddev', stddev)
+        tf.compat.v1.summary.scalar('max', tf.reduce_max(var))
+        tf.compat.v1.summary.scalar('min', tf.reduce_min(var))
+        tf.compat.v1.summary.histogram('histogram', var)
 
 
 def build_layer_summaries(layer_name):
     """Attach summaries for each variable in the layer's scope"""
 
-    for var in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=layer_name):
+    for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope=layer_name):
         variable_summaries(var)
 
 
@@ -97,8 +97,8 @@ def load_train_dataset():
         # "../datasets/stl10/rot_90_1_train.pkl",
         # "../datasets/stl10/rot_90_3_train.pkl",
         "../datasets/stl10/rand_distorted_train_0.pkl",
-        "../datasets/stl10/rand_distorted_train_1.pkl",
-        "../datasets/stl10/rand_distorted_train_2.pkl",
+        # "../datasets/stl10/rand_distorted_train_1.pkl",
+        # "../datasets/stl10/rand_distorted_train_2.pkl",
     ])
 
     return dataset.x, dataset.y
@@ -339,24 +339,24 @@ def model_fn(features, labels, mode, params, config):
     labels = tf.identity(labels, name="labels")
 
     # Calculate Loss
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="loss")
-    tf.summary.scalar("cross_entropy", loss)
+    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, scope="loss")
+    tf.compat.v1.summary.scalar("cross_entropy", loss)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-        summary_saver_hook = tf.train.SummarySaverHook(
+        summary_saver_hook = tf.estimator.SummarySaverHook(
             save_steps=100,
             output_dir=config.model_dir + "/train",
-            summary_op=tf.summary.merge_all()
+            summary_op=tf.compat.v1.summary.merge_all()
         )
 
-        optimizer = tf.train.AdamOptimizer(
+        optimizer = tf.compat.v1.train.AdamOptimizer(
             learning_rate=tf.app.flags.FLAGS.initial_learning_rate,
             epsilon=0.1,
             name="adam_optimizer"
         )
 
         train_op = optimizer.minimize(
-            loss=loss, global_step=tf.train.get_global_step(), name="minimize_loss")
+            loss=loss, global_step=tf.compat.v1.train.get_global_step(), name="minimize_loss")
 
         return tf.estimator.EstimatorSpec(
             mode=mode,
@@ -433,7 +433,7 @@ def extend_original_data():
         "stl10",
         crop_shape=(72, 72, 3),
         target_size=96,
-        rand_dist_sets=3,
-        add_rot90_dist=True,
+        # rand_dist_sets=3,
+        # add_rot90_dist=True,
         save_location="../datasets"
     )
